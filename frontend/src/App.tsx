@@ -89,6 +89,10 @@ function MainApp() {
   const [analysisError, setAnalysisError] = useState("");
   const [authView, setAuthView] = useState<"login" | "register">("login");
 
+  const handleAnalysisProgress = useCallback(() => {
+    setState("dashboard");
+  }, []);
+
   if (loading) {
     return (
       <div className="app">
@@ -153,10 +157,6 @@ function MainApp() {
       setState("upload");
     }
   };
-
-  const handleAnalysisProgress = useCallback(() => {
-    setState("dashboard");
-  }, []);
 
   const handleReset = () => {
     setState("upload");
