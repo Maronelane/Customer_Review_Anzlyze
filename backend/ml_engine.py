@@ -69,6 +69,23 @@ def detect_sentiment_from_rating(rating) -> str:
     return "neutral"
 
 
+def _generate_labels_from_text(texts: list[str]) -> list[str]:
+    try:
+        from textblob import TextBlob
+        labels = []
+        for t in texts:
+            polarity = TextBlob(str(t)).sentiment.polarity
+            if polarity > 0.1:
+                labels.append("positive")
+            elif polarity < -0.1:
+                labels.append("negative")
+            else:
+                labels.append("neutral")
+        return labels
+    except ImportError:
+        return ["neutral"] * len(texts)
+
+
 def build_tfidf(texts: list[str], max_features: int = 5000):
     min_df = 2 if len(texts) >= 20 else 1
     vectorizer = TfidfVectorizer(max_features=max_features, ngram_range=(1, 2), min_df=min_df, max_df=0.95)
@@ -128,30 +145,39 @@ def predict_sentiment(texts: list[str], model, vectorizer) -> list[str]:
 
 def _run_transformer_pipeline(texts: list[str], labels: list[str], progress_cb=None):
     try:
+        import torch
         from transformers import pipeline as hf_pipeline
+
         if progress_cb:
             progress_cb("Loading transformer model", 40)
-        classifier = hf_pipeline("sentiment-analysis", model="distilbert-base-uncased-finetuned-sst-2-english", truncation=True, max_length=512)
+
+        device = 0 if torch.cuda.is_available() else -1
+        model_name = "cardiffnlp/twitter-roberta-base-sentiment-latest"
+        classifier = hf_pipeline(
+            "sentiment-analysis",
+            model=model_name,
+            device=device,
+            truncation=True,
+            max_length=512,
+        )
+
+        label_map = {"positive": "positive", "negative": "negative", "neutral": "neutral",
+                      "label_0": "negative", "label_1": "neutral", "label_2": "positive",
+                      "pos": "positive", "neg": "negative"}
 
         predictions = []
-        batch_size = 32
+        batch_size = 64 if torch.cuda.is_available() else 16
         for i in range(0, len(texts), batch_size):
-            batch = [t[:512] for t in texts[i:i + batch_size]]
+            batch = [str(t)[:512] for t in texts[i:i + batch_size]]
             results = classifier(batch)
             for r in results:
-                label = r["label"].lower()
-                if label == "pos":
-                    predictions.append("positive")
-                elif label == "neg":
-                    predictions.append("negative")
-                else:
-                    predictions.append("neutral")
+                raw_label = r["label"].lower()
+                predictions.append(label_map.get(raw_label, "neutral"))
             if progress_cb:
                 pct = 40 + int((i + len(batch)) / len(texts) * 30)
                 progress_cb("Running transformer predictions", min(pct, 70))
 
-        from collections import Counter as C
-        sentiment_counts = C(predictions)
+        sentiment_counts = Counter(predictions)
         total = len(predictions)
         sentiment_distribution = {
             "positive": sentiment_counts.get("positive", 0),
@@ -187,7 +213,7 @@ def run_full_pipeline(df: pd.DataFrame, text_column: str, rating_column: str = N
     if rating_column and rating_column in df.columns:
         labels = [detect_sentiment_from_rating(r) for r in df[rating_column].tolist()]
     else:
-        labels = [detect_sentiment_from_rating(3)] * len(texts)
+        labels = _generate_labels_from_text(texts)
 
     if progress_cb:
         progress_cb("Cleaning text", 10)

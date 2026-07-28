@@ -201,8 +201,8 @@ export default function FileUpload({ onUploadComplete }: Props) {
                 checked={useTransformer}
                 onChange={(e) => setUseTransformer(e.target.checked)}
               />
-              <span>Use Advanced Model (DistilBERT)</span>
-              <span className="toggle-hint">Slower but more accurate</span>
+              <span>Use Advanced Model (RoBERTa)</span>
+              <span className="toggle-hint">Slower but more accurate (3-class)</span>
             </label>
           </div>
 
