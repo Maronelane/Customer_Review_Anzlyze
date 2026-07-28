@@ -70,13 +70,17 @@ def detect_sentiment_from_rating(rating) -> str:
 
 
 def build_tfidf(texts: list[str], max_features: int = 5000):
-    vectorizer = TfidfVectorizer(max_features=max_features, ngram_range=(1, 2), min_df=2, max_df=0.95)
+    min_df = 2 if len(texts) >= 20 else 1
+    vectorizer = TfidfVectorizer(max_features=max_features, ngram_range=(1, 2), min_df=min_df, max_df=0.95)
     X = vectorizer.fit_transform(texts)
     return X, vectorizer
 
 
 def train_models(X, y):
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
+    counts = Counter(y)
+    min_count = min(counts.values())
+    stratify_param = y if min_count >= 2 else None
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=stratify_param)
 
     models = {
         "logistic_regression": LogisticRegression(max_iter=1000, C=1.0, random_state=42),
