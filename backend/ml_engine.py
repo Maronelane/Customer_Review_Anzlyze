@@ -1,5 +1,6 @@
 """
 ML Engine: Text cleaning, TF-IDF vectorization, model training, and sentiment prediction.
+Supports optional Transformer (DistilBERT) models and custom problem categories.
 """
 import re
 import string
@@ -14,12 +15,11 @@ from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
 from nltk.tokenize import word_tokenize
 from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.svm import LinearSVC
 from sklearn.metrics import classification_report, accuracy_score
-from sklearn.pipeline import Pipeline
 
 MODELS_DIR = os.path.join(os.path.dirname(__file__), "saved_models")
 os.makedirs(MODELS_DIR, exist_ok=True)
@@ -126,13 +126,71 @@ def predict_sentiment(texts: list[str], model, vectorizer) -> list[str]:
     return model.predict(X).tolist()
 
 
-def run_full_pipeline(df: pd.DataFrame, text_column: str, rating_column: str = None):
+def _run_transformer_pipeline(texts: list[str], labels: list[str], progress_cb=None):
+    try:
+        from transformers import pipeline as hf_pipeline
+        if progress_cb:
+            progress_cb("Loading transformer model", 40)
+        classifier = hf_pipeline("sentiment-analysis", model="distilbert-base-uncased-finetuned-sst-2-english", truncation=True, max_length=512)
+
+        predictions = []
+        batch_size = 32
+        for i in range(0, len(texts), batch_size):
+            batch = [t[:512] for t in texts[i:i + batch_size]]
+            results = classifier(batch)
+            for r in results:
+                label = r["label"].lower()
+                if label == "pos":
+                    predictions.append("positive")
+                elif label == "neg":
+                    predictions.append("negative")
+                else:
+                    predictions.append("neutral")
+            if progress_cb:
+                pct = 40 + int((i + len(batch)) / len(texts) * 30)
+                progress_cb("Running transformer predictions", min(pct, 70))
+
+        from collections import Counter as C
+        sentiment_counts = C(predictions)
+        total = len(predictions)
+        sentiment_distribution = {
+            "positive": sentiment_counts.get("positive", 0),
+            "negative": sentiment_counts.get("negative", 0),
+            "neutral": sentiment_counts.get("neutral", 0),
+            "total": total,
+        }
+
+        predictions_with_text = [
+            {"text": texts[i], "sentiment": predictions[i], "cleaned": texts[i]}
+            for i in range(len(predictions))
+        ]
+
+        return {
+            "models": {"transformer": {"accuracy": 0, "report": {}}},
+            "best_model": "transformer",
+            "best_accuracy": 0,
+            "sentiment_distribution": sentiment_distribution,
+            "predictions": predictions_with_text,
+            "feature_names": [],
+            "labels": labels,
+            "cleaned_texts": texts,
+        }
+    except Exception as e:
+        raise ValueError(f"Transformer pipeline failed: {e}. Falling back to TF-IDF.")
+
+
+def run_full_pipeline(df: pd.DataFrame, text_column: str, rating_column: str = None,
+                      progress_cb=None, custom_categories: dict = None,
+                      use_transformer: bool = False):
     texts = df[text_column].fillna("").tolist()
 
     if rating_column and rating_column in df.columns:
         labels = [detect_sentiment_from_rating(r) for r in df[rating_column].tolist()]
     else:
         labels = [detect_sentiment_from_rating(3)] * len(texts)
+
+    if progress_cb:
+        progress_cb("Cleaning text", 10)
 
     cleaned_texts = [clean_text(t) for t in texts]
 
@@ -144,9 +202,27 @@ def run_full_pipeline(df: pd.DataFrame, text_column: str, rating_column: str = N
     if len(cleaned_texts) < 10:
         raise ValueError("Not enough valid reviews for analysis (minimum 10 required).")
 
+    if use_transformer:
+        try:
+            result = _run_transformer_pipeline(original_texts, labels, progress_cb)
+            result["cleaned_texts"] = cleaned_texts
+            return result
+        except ValueError:
+            pass
+
+    if progress_cb:
+        progress_cb("Building TF-IDF matrix", 20)
+
     X, vectorizer = build_tfidf(cleaned_texts)
+
+    if progress_cb:
+        progress_cb("Training models", 35)
+
     trained_models, results, best_name = train_models(X, labels)
     best_model = trained_models[best_name]
+
+    if progress_cb:
+        progress_cb("Making predictions", 60)
 
     all_predictions = best_model.predict(X).tolist()
 
@@ -164,6 +240,9 @@ def run_full_pipeline(df: pd.DataFrame, text_column: str, rating_column: str = N
         {"text": original_texts[i], "sentiment": all_predictions[i], "cleaned": cleaned_texts[i]}
         for i in range(len(all_predictions))
     ]
+
+    if progress_cb:
+        progress_cb("Training complete", 70)
 
     return {
         "models": results,

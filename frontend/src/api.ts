@@ -1,7 +1,21 @@
 const API_BASE = "/api";
 
+function getToken(): string | null {
+  try {
+    const saved = localStorage.getItem("auth");
+    if (saved) return JSON.parse(saved).token;
+  } catch { /* ignore */ }
+  return null;
+}
+
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, options);
+  const token = getToken();
+  const headers: Record<string, string> = {};
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  if (options?.headers) {
+    Object.assign(headers, options.headers);
+  }
+  const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
     throw new Error(err.error || "API request failed");
@@ -40,6 +54,7 @@ export interface Problem {
   severity: string;
   percentage: number;
   examples: string[];
+  is_custom?: boolean;
 }
 
 export interface Recommendation {
@@ -110,6 +125,11 @@ export interface Analysis {
   completed_at: string | null;
 }
 
+export interface ProgressData {
+  step: string;
+  percent: number;
+}
+
 export function uploadDataset(file: File, textColumn: string, ratingColumn: string) {
   const formData = new FormData();
   formData.append("file", file);
@@ -122,7 +142,7 @@ export function uploadDataset(file: File, textColumn: string, ratingColumn: stri
   });
 }
 
-export function runAnalysis(analysisId: string, textColumn: string, ratingColumn: string) {
+export function runAnalysis(analysisId: string, textColumn: string, ratingColumn: string, customCategories?: Record<string, string[]>, useTransformer?: boolean) {
   return apiFetch<AnalyzeResponse>("/analyze", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -130,6 +150,8 @@ export function runAnalysis(analysisId: string, textColumn: string, ratingColumn
       analysis_id: analysisId,
       text_column: textColumn,
       rating_column: ratingColumn,
+      custom_categories: customCategories || null,
+      use_transformer: useTransformer || false,
     }),
   });
 }
@@ -142,13 +164,33 @@ export function getPredictions(
   analysisId: string,
   limit = 50,
   offset = 0,
-  sentiment?: string
+  sentiment?: string,
+  search?: string
 ) {
   const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
   if (sentiment) params.set("sentiment", sentiment);
+  if (search) params.set("q", search);
   return apiFetch<PredictionResponse>(`/predictions/${analysisId}?${params}`);
+}
+
+export function getProgress(analysisId: string) {
+  return apiFetch<ProgressData>(`/progress/${analysisId}`);
 }
 
 export function listAnalyses() {
   return apiFetch<Analysis[]>("/analyses");
+}
+
+export function rerunAnalysis(analysisId: string, textColumn?: string, ratingColumn?: string, customCategories?: Record<string, string[]>, useTransformer?: boolean) {
+  return apiFetch<AnalyzeResponse>("/rerun", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      analysis_id: analysisId,
+      text_column: textColumn,
+      rating_column: ratingColumn,
+      custom_categories: customCategories || null,
+      use_transformer: useTransformer || false,
+    }),
+  });
 }

@@ -1,9 +1,8 @@
 """
 Problem Detector: Extracts common problems/themes from negative customer reviews.
+Supports custom user-defined categories.
 """
 from collections import Counter
-import re
-import numpy as np
 
 
 PROBLEM_KEYWORDS = {
@@ -18,7 +17,11 @@ PROBLEM_KEYWORDS = {
 }
 
 
-def detect_problems(predictions: list[dict], feature_names: list[str], top_n: int = 15):
+def detect_problems(predictions: list[dict], feature_names: list[str], top_n: int = 15, custom_categories: dict = None):
+    keywords = dict(PROBLEM_KEYWORDS)
+    if custom_categories:
+        keywords.update(custom_categories)
+
     negative_reviews = [p for p in predictions if p["sentiment"] == "negative"]
 
     if not negative_reviews:
@@ -36,15 +39,15 @@ def detect_problems(predictions: list[dict], feature_names: list[str], top_n: in
     problem_scores = {}
     problem_examples = {}
 
-    for category, keywords in PROBLEM_KEYWORDS.items():
+    for category, cat_keywords in keywords.items():
         score = 0
         examples = []
         for word, freq in word_freq:
-            if word in keywords:
+            if word in cat_keywords:
                 score += freq
         for review in negative_reviews:
             text_lower = review["cleaned"].lower()
-            for keyword in keywords:
+            for keyword in cat_keywords:
                 if keyword in text_lower:
                     if len(examples) < 3:
                         examples.append(review["text"][:200])
@@ -52,12 +55,6 @@ def detect_problems(predictions: list[dict], feature_names: list[str], top_n: in
         if score > 0:
             problem_scores[category] = score
             problem_examples[category] = examples
-
-    tfidf_negative_indices = []
-    all_cleaned = [p["cleaned"] for p in predictions]
-    for i, p in enumerate(predictions):
-        if p["sentiment"] == "negative":
-            tfidf_negative_indices.append(i)
 
     top_tfidf_words = []
     if feature_names and len(negative_reviews) > 0:
@@ -73,6 +70,7 @@ def detect_problems(predictions: list[dict], feature_names: list[str], top_n: in
     results = []
     for category, score in sorted_problems:
         severity = "high" if score > len(negative_reviews) * 0.3 else "medium" if score > len(negative_reviews) * 0.1 else "low"
+        is_custom = custom_categories and category in custom_categories
         results.append({
             "category": category.replace("_", " ").title(),
             "category_key": category,
@@ -80,6 +78,7 @@ def detect_problems(predictions: list[dict], feature_names: list[str], top_n: in
             "severity": severity,
             "percentage": round(score / max(len(negative_reviews), 1) * 100, 1),
             "examples": problem_examples.get(category, []),
+            "is_custom": is_custom,
         })
 
     return {

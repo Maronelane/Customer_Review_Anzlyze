@@ -29,9 +29,40 @@ def init_mongo():
     db.analyses.create_index("created_at")
     db.results.create_index("analysis_id")
     db.predictions.create_index([("analysis_id", 1), ("sentiment", 1)])
+    db.users.create_index("username", unique=True)
+    db.progress.create_index("analysis_id", unique=True)
 
 
-def create_analysis(filename: str, text_column: str, rating_column: str = None, stored_path: str = None) -> dict:
+# ── User Auth ──
+
+
+def create_user(username: str, password_hash: str) -> dict:
+    db = get_db()
+    user_id = str(uuid.uuid4())[:8]
+    doc = {
+        "_id": user_id,
+        "username": username,
+        "password_hash": password_hash,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    db.users.insert_one(doc)
+    return {"user_id": user_id, "username": username}
+
+
+def get_user_by_username(username: str):
+    db = get_db()
+    return db.users.find_one({"username": username})
+
+
+def get_user_by_id(user_id: str):
+    db = get_db()
+    return db.users.find_one({"_id": user_id}, {"password_hash": 0})
+
+
+# ── Analysis ──
+
+
+def create_analysis(filename: str, text_column: str, rating_column: str = None, stored_path: str = None, user_id: str = None) -> dict:
     db = get_db()
     analysis_id = str(uuid.uuid4())[:8]
     doc = {
@@ -40,6 +71,7 @@ def create_analysis(filename: str, text_column: str, rating_column: str = None, 
         "text_column": text_column,
         "rating_column": rating_column,
         "stored_path": stored_path,
+        "user_id": user_id,
         "total_reviews": None,
         "status": "uploaded",
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -94,16 +126,60 @@ def get_results(analysis_id: str):
     return doc
 
 
-def get_predictions(analysis_id: str, limit: int = 100, offset: int = 0, sentiment_filter: str = None):
+def get_predictions(analysis_id: str, limit: int = 100, offset: int = 0, sentiment_filter: str = None, search_query: str = None):
     db = get_db()
     query = {"analysis_id": analysis_id}
     if sentiment_filter:
         query["sentiment"] = sentiment_filter
+    if search_query:
+        query["review_text"] = {"$regex": search_query, "$options": "i"}
     total = db.predictions.count_documents(query)
     rows = list(db.predictions.find(query, {"_id": 0}).sort("_id", 1).skip(offset).limit(limit))
     return {"predictions": rows, "total": total}
 
 
-def list_analyses():
+def list_analyses(user_id: str = None):
     db = get_db()
-    return list(db.analyses.find().sort("created_at", -1))
+    query = {"user_id": user_id} if user_id else {}
+    return list(db.analyses.find(query).sort("created_at", -1))
+
+
+# ── Progress Tracking ──
+
+
+def set_progress(analysis_id: str, step: str, percent: int):
+    db = get_db()
+    db.progress.update_one(
+        {"analysis_id": analysis_id},
+        {"$set": {"step": step, "percent": percent, "updated_at": datetime.now(timezone.utc).isoformat()}},
+        upsert=True,
+    )
+
+
+def get_progress(analysis_id: str):
+    db = get_db()
+    doc = db.progress.find_one({"analysis_id": analysis_id}, {"_id": 0})
+    return doc or {"step": "starting", "percent": 0}
+
+
+def clear_progress(analysis_id: str):
+    db = get_db()
+    db.progress.delete_one({"analysis_id": analysis_id})
+
+
+# ── Comparison ──
+
+
+def get_comparison(id1: str, id2: str):
+    r1 = get_results(id1)
+    r2 = get_results(id2)
+    a1 = get_analysis(id1)
+    a2 = get_analysis(id2)
+    if not r1 or not r2:
+        return None
+    return {
+        "analysis1": a1,
+        "analysis2": a2,
+        "results1": r1,
+        "results2": r2,
+    }

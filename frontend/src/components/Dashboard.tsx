@@ -4,10 +4,13 @@ import SentimentChart from "./SentimentChart";
 import ProblemList from "./ProblemList";
 import Recommendations from "./Recommendations";
 import ReviewTable from "./ReviewTable";
+import ExportButton from "./ExportButton";
+import EmailModal from "./EmailModal";
 
 interface Props {
   analysisId: string;
   onReset: () => void;
+  onCompare?: () => void;
 }
 
 export default function Dashboard({ analysisId, onReset }: Props) {
@@ -15,6 +18,7 @@ export default function Dashboard({ analysisId, onReset }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState<"overview" | "reviews">("overview");
+  const [showEmail, setShowEmail] = useState(false);
 
   useEffect(() => {
     const fetchResults = async () => {
@@ -61,9 +65,15 @@ export default function Dashboard({ analysisId, onReset }: Props) {
             {data.analysis.filename} — {data.analysis.total_reviews} reviews analyzed
           </p>
         </div>
-        <button className="btn btn-secondary" onClick={onReset}>
-          New Analysis
-        </button>
+        <div className="header-actions">
+          <ExportButton analysisId={analysisId} />
+          <button className="btn btn-secondary" onClick={() => setShowEmail(true)}>
+            Email
+          </button>
+          <button className="btn btn-secondary" onClick={onReset}>
+            New Analysis
+          </button>
+        </div>
       </div>
 
       <div className="overview-cards">
@@ -128,6 +138,10 @@ export default function Dashboard({ analysisId, onReset }: Props) {
         </div>
       ) : (
         <ReviewTable analysisId={analysisId} />
+      )}
+
+      {showEmail && (
+        <EmailModal analysisId={analysisId} onClose={() => setShowEmail(false)} />
       )}
     </div>
   );

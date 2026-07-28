@@ -22,16 +22,18 @@ export default function FileUpload({ onUploadComplete }: Props) {
   const [step, setStep] = useState<"select" | "configure" | "ready">("select");
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
+  const [useTransformer, setUseTransformer] = useState(false);
+  const [customCategories, setCustomCategories] = useState<{ name: string; keywords: string }[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     const dropped = e.dataTransfer.files[0];
-    if (dropped && dropped.name.endsWith(".csv")) {
+    if (dropped && /\.(csv|xlsx|xls|json)$/i.test(dropped.name)) {
       setFile(dropped);
       setError("");
     } else {
-      setError("Please upload a CSV file");
+      setError("Please upload a CSV, Excel, or JSON file");
     }
   }, []);
 
@@ -82,6 +84,14 @@ export default function FileUpload({ onUploadComplete }: Props) {
       setError("Please select a text column");
       return;
     }
+    const cats: Record<string, string[]> = {};
+    customCategories.forEach((c) => {
+      if (c.name && c.keywords) {
+        cats[c.name.toLowerCase().replace(/\s+/g, "_")] = c.keywords.split(",").map((k) => k.trim().toLowerCase());
+      }
+    });
+    (window as unknown as { _customCategories: Record<string, string[]> })._customCategories = Object.keys(cats).length > 0 ? cats : undefined;
+    (window as unknown as { _useTransformer: boolean })._useTransformer = useTransformer;
     onUploadComplete({
       analysisId,
       columns,
@@ -89,6 +99,14 @@ export default function FileUpload({ onUploadComplete }: Props) {
       preview,
       filename,
     });
+  };
+
+  const addCategory = () => setCustomCategories([...customCategories, { name: "", keywords: "" }]);
+  const removeCategory = (i: number) => setCustomCategories(customCategories.filter((_, idx) => idx !== i));
+  const updateCategory = (i: number, field: "name" | "keywords", val: string) => {
+    const updated = [...customCategories];
+    updated[i][field] = val;
+    setCustomCategories(updated);
   };
 
   return (
@@ -103,7 +121,7 @@ export default function FileUpload({ onUploadComplete }: Props) {
           <input
             ref={fileRef}
             type="file"
-            accept=".csv"
+            accept=".csv,.xlsx,.xls,.json"
             onChange={handleFileSelect}
             style={{ display: "none" }}
           />
@@ -114,8 +132,8 @@ export default function FileUpload({ onUploadComplete }: Props) {
               <line x1="12" y1="3" x2="12" y2="15" />
             </svg>
           </div>
-          <h3>Drop your CSV file here</h3>
-          <p>or click to browse</p>
+          <h3>Drop your file here</h3>
+          <p>Supports CSV, Excel (.xlsx), and JSON files</p>
           {file && (
             <div className="file-selected">
               <span className="file-name">{file.name}</span>
@@ -172,6 +190,40 @@ export default function FileUpload({ onUploadComplete }: Props) {
                 ))}
               </select>
             </div>
+          </div>
+
+          <div className="advanced-options">
+            <label className="toggle-label">
+              <input
+                type="checkbox"
+                checked={useTransformer}
+                onChange={(e) => setUseTransformer(e.target.checked)}
+              />
+              <span>Use Advanced Model (DistilBERT)</span>
+              <span className="toggle-hint">Slower but more accurate</span>
+            </label>
+          </div>
+
+          <div className="custom-categories-section">
+            <h4>Custom Problem Categories (optional)</h4>
+            {customCategories.map((cat, i) => (
+              <div key={i} className="category-row">
+                <input
+                  type="text"
+                  placeholder="Category name"
+                  value={cat.name}
+                  onChange={(e) => updateCategory(i, "name", e.target.value)}
+                />
+                <input
+                  type="text"
+                  placeholder="Keywords (comma-separated)"
+                  value={cat.keywords}
+                  onChange={(e) => updateCategory(i, "keywords", e.target.value)}
+                />
+                <button className="btn-icon" onClick={() => removeCategory(i)}>x</button>
+              </div>
+            ))}
+            <button className="btn btn-secondary btn-sm" onClick={addCategory}>+ Add Category</button>
           </div>
         </div>
       )}

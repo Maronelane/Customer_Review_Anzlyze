@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { getPredictions, type Prediction, type PredictionResponse } from "../api";
 
 interface Props {
@@ -10,13 +10,17 @@ export default function ReviewTable({ analysisId }: Props) {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
   const [filter, setFilter] = useState<string>("");
+  const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
+  const searchRef = useRef<ReturnType<typeof setTimeout>>();
   const limit = 20;
 
   const fetchPredictions = async () => {
     setLoading(true);
     try {
-      const data: PredictionResponse = await getPredictions(analysisId, limit, page * limit, filter || undefined);
+      const data: PredictionResponse = await getPredictions(
+        analysisId, limit, page * limit, filter || undefined, search || undefined
+      );
       setPredictions(data.predictions);
       setTotal(data.total);
     } catch (err) {
@@ -28,11 +32,17 @@ export default function ReviewTable({ analysisId }: Props) {
 
   useEffect(() => {
     setPage(0);
-  }, [filter]);
+  }, [filter, search]);
 
   useEffect(() => {
     fetchPredictions();
-  }, [analysisId, page, filter]);
+  }, [analysisId, page, filter, search]);
+
+  const handleSearch = (val: string) => {
+    setSearch(val);
+    if (searchRef.current) clearTimeout(searchRef.current);
+    searchRef.current = setTimeout(() => {}, 300);
+  };
 
   const totalPages = Math.ceil(total / limit);
 
@@ -47,6 +57,13 @@ export default function ReviewTable({ analysisId }: Props) {
       <div className="card-header">
         <h3>Review Predictions</h3>
         <div className="table-controls">
+          <input
+            type="text"
+            className="search-input"
+            placeholder="Search reviews..."
+            value={search}
+            onChange={(e) => handleSearch(e.target.value)}
+          />
           <select value={filter} onChange={(e) => setFilter(e.target.value)}>
             <option value="">All Sentiments</option>
             <option value="positive">Positive Only</option>
