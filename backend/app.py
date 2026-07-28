@@ -13,6 +13,7 @@ from werkzeug.utils import secure_filename
 from db import (
     create_analysis, update_analysis_status, save_results,
     save_predictions, get_analysis, get_results, get_predictions, list_analyses,
+    init_mongo,
 )
 from ml_engine import run_full_pipeline
 from problem_detector import detect_problems
@@ -81,7 +82,7 @@ def upload_dataset():
         analysis = create_analysis(filename, text_column or columns[0], rating_column or None, stored_path=unique_name)
 
         return jsonify({
-            "analysis_id": analysis["id"],
+            "analysis_id": analysis["_id"],
             "filename": filename,
             "columns": columns,
             "row_count": row_count,
@@ -238,4 +239,5 @@ def serve_frontend(path):
 
 
 if __name__ == "__main__":
+    init_mongo()
     app.run(debug=True, port=5001)

@@ -1,163 +1,109 @@
 """
-SQLite database for storing analysis results.
+MongoDB database for storing analysis results.
 """
-import sqlite3
-import json
 import os
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "anzlyze.db")
+from pymongo import MongoClient
+from dotenv import load_dotenv
+
+load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
+
+_client = None
+_db = None
 
 
-def get_conn():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    return conn
+def get_db():
+    global _client, _db
+    if _db is None:
+        uri = os.environ.get("MONGODB_URI", "mongodb://localhost:27017")
+        db_name = os.environ.get("MONGODB_DB", "anzlyze")
+        _client = MongoClient(uri)
+        _db = _client[db_name]
+    return _db
 
 
-def init_db():
-    conn = get_conn()
-    conn.executescript("""
-        CREATE TABLE IF NOT EXISTS analyses (
-            id TEXT PRIMARY KEY,
-            filename TEXT NOT NULL,
-            stored_path TEXT,
-            text_column TEXT NOT NULL,
-            rating_column TEXT,
-            total_reviews INTEGER,
-            status TEXT DEFAULT 'uploaded',
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            completed_at TEXT
-        );
-
-        CREATE TABLE IF NOT EXISTS results (
-            id TEXT PRIMARY KEY,
-            analysis_id TEXT NOT NULL,
-            best_model TEXT,
-            best_accuracy REAL,
-            sentiment_distribution TEXT,
-            problems TEXT,
-            recommendations TEXT,
-            model_results TEXT,
-            FOREIGN KEY (analysis_id) REFERENCES analyses(id)
-        );
-
-        CREATE TABLE IF NOT EXISTS predictions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            analysis_id TEXT NOT NULL,
-            review_text TEXT,
-            sentiment TEXT,
-            FOREIGN KEY (analysis_id) REFERENCES analyses(id)
-        );
-    """)
-    conn.commit()
-    conn.close()
+def init_mongo():
+    db = get_db()
+    db.analyses.create_index("created_at")
+    db.results.create_index("analysis_id")
+    db.predictions.create_index([("analysis_id", 1), ("sentiment", 1)])
 
 
 def create_analysis(filename: str, text_column: str, rating_column: str = None, stored_path: str = None) -> dict:
-    conn = get_conn()
+    db = get_db()
     analysis_id = str(uuid.uuid4())[:8]
-    conn.execute(
-        "INSERT INTO analyses (id, filename, text_column, rating_column, stored_path, status) VALUES (?, ?, ?, ?, ?, 'uploaded')",
-        (analysis_id, filename, text_column, rating_column, stored_path),
-    )
-    conn.commit()
-    row = conn.execute("SELECT * FROM analyses WHERE id = ?", (analysis_id,)).fetchone()
-    conn.close()
-    return dict(row)
+    doc = {
+        "_id": analysis_id,
+        "filename": filename,
+        "text_column": text_column,
+        "rating_column": rating_column,
+        "stored_path": stored_path,
+        "total_reviews": None,
+        "status": "uploaded",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "completed_at": None,
+    }
+    db.analyses.insert_one(doc)
+    return doc
 
 
 def update_analysis_status(analysis_id: str, status: str, total_reviews: int = None):
-    conn = get_conn()
+    db = get_db()
+    update = {"status": status}
     if total_reviews is not None:
-        conn.execute("UPDATE analyses SET status = ?, total_reviews = ?, completed_at = ? WHERE id = ?",
-                      (status, total_reviews, datetime.utcnow().isoformat(), analysis_id))
-    else:
-        conn.execute("UPDATE analyses SET status = ? WHERE id = ?", (status, analysis_id))
-    conn.commit()
-    conn.close()
+        update["total_reviews"] = total_reviews
+        update["completed_at"] = datetime.now(timezone.utc).isoformat()
+    db.analyses.update_one({"_id": analysis_id}, {"$set": update})
 
 
 def save_results(analysis_id: str, data: dict):
-    conn = get_conn()
-    result_id = str(uuid.uuid4())[:8]
-    conn.execute(
-        """INSERT INTO results (id, analysis_id, best_model, best_accuracy, sentiment_distribution,
-           problems, recommendations, model_results) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-        (
-            result_id,
-            analysis_id,
-            data.get("best_model"),
-            data.get("best_accuracy"),
-            json.dumps(data.get("sentiment_distribution")),
-            json.dumps(data.get("problems")),
-            json.dumps(data.get("recommendations")),
-            json.dumps(data.get("model_results")),
-        ),
-    )
-    conn.commit()
-    conn.close()
-    return result_id
+    db = get_db()
+    doc = {
+        "_id": str(uuid.uuid4())[:8],
+        "analysis_id": analysis_id,
+        "best_model": data.get("best_model"),
+        "best_accuracy": data.get("best_accuracy"),
+        "sentiment_distribution": data.get("sentiment_distribution"),
+        "problems": data.get("problems"),
+        "recommendations": data.get("recommendations"),
+        "model_results": data.get("model_results"),
+    }
+    db.results.insert_one(doc)
 
 
 def save_predictions(analysis_id: str, predictions: list[dict]):
-    conn = get_conn()
-    for p in predictions:
-        conn.execute(
-            "INSERT INTO predictions (analysis_id, review_text, sentiment) VALUES (?, ?, ?)",
-            (analysis_id, p["text"][:2000], p["sentiment"]),
-        )
-    conn.commit()
-    conn.close()
+    db = get_db()
+    docs = [
+        {"analysis_id": analysis_id, "review_text": p["text"][:2000], "sentiment": p["sentiment"]}
+        for p in predictions
+    ]
+    if docs:
+        db.predictions.insert_many(docs)
 
 
 def get_analysis(analysis_id: str):
-    conn = get_conn()
-    row = conn.execute("SELECT * FROM analyses WHERE id = ?", (analysis_id,)).fetchone()
-    conn.close()
-    return dict(row) if row else None
+    db = get_db()
+    return db.analyses.find_one({"_id": analysis_id})
 
 
 def get_results(analysis_id: str):
-    conn = get_conn()
-    row = conn.execute("SELECT * FROM results WHERE analysis_id = ?", (analysis_id,)).fetchone()
-    conn.close()
-    if not row:
-        return None
-    result = dict(row)
-    for field in ["sentiment_distribution", "problems", "recommendations", "model_results"]:
-        if result.get(field):
-            result[field] = json.loads(result[field])
-    return result
+    db = get_db()
+    doc = db.results.find_one({"analysis_id": analysis_id})
+    return doc
 
 
 def get_predictions(analysis_id: str, limit: int = 100, offset: int = 0, sentiment_filter: str = None):
-    conn = get_conn()
+    db = get_db()
+    query = {"analysis_id": analysis_id}
     if sentiment_filter:
-        rows = conn.execute(
-            "SELECT * FROM predictions WHERE analysis_id = ? AND sentiment = ? LIMIT ? OFFSET ?",
-            (analysis_id, sentiment_filter, limit, offset),
-        ).fetchall()
-    else:
-        rows = conn.execute(
-            "SELECT * FROM predictions WHERE analysis_id = ? LIMIT ? OFFSET ?",
-            (analysis_id, limit, offset),
-        ).fetchall()
-    total = conn.execute(
-        "SELECT COUNT(*) as cnt FROM predictions WHERE analysis_id = ?" + (" AND sentiment = ?" if sentiment_filter else ""),
-        (analysis_id, sentiment_filter) if sentiment_filter else (analysis_id,),
-    ).fetchone()["cnt"]
-    conn.close()
-    return {"predictions": [dict(r) for r in rows], "total": total}
+        query["sentiment"] = sentiment_filter
+    total = db.predictions.count_documents(query)
+    rows = list(db.predictions.find(query, {"_id": 0}).sort("_id", 1).skip(offset).limit(limit))
+    return {"predictions": rows, "total": total}
 
 
 def list_analyses():
-    conn = get_conn()
-    rows = conn.execute("SELECT * FROM analyses ORDER BY created_at DESC").fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
-
-
-init_db()
+    db = get_db()
+    return list(db.analyses.find().sort("created_at", -1))

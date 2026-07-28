@@ -10,7 +10,7 @@ Upload CSV → Text Cleaning → TF-IDF Vectorization → ML Training → Sentim
 
 ## Tech Stack
 
-- **Backend:** Flask (Python 3.x) + SQLite
+- **Backend:** Flask (Python 3.x) + MongoDB
 - **Frontend:** React 18 + TypeScript + Vite
 - **ML:** scikit-learn (Logistic Regression, Naive Bayes, SVM) + NLTK + TF-IDF
 - **Charts:** Recharts
@@ -22,6 +22,10 @@ Upload CSV → Text Cleaning → TF-IDF Vectorization → ML Training → Sentim
 ```bash
 cd backend
 pip install -r requirements.txt
+
+# Make sure MongoDB is running locally on port 27017
+# Or set MONGODB_URI in .env to your MongoDB instance
+
 python app.py
 # Flask runs on http://localhost:5001
 ```
