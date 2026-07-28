@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { ThemeProvider, useTheme } from "./context/ThemeContext";
 import Login from "./components/Login";
@@ -10,6 +10,15 @@ import CompareView from "./components/CompareView";
 import { getProgress } from "./api";
 
 type AppState = "upload" | "analyzing" | "dashboard" | "compare";
+
+interface UploadData {
+  analysisId: string;
+  columns: string[];
+  rowCount: number;
+  filename: string;
+  customCategories?: Record<string, string[]>;
+  useTransformer?: boolean;
+}
 
 function AnalyzingScreen({ analysisId, onComplete }: { analysisId: string; onComplete: () => void }) {
   const [step, setStep] = useState("Starting...");
@@ -74,11 +83,22 @@ function ThemeToggle() {
 }
 
 function MainApp() {
-  const { user, logout } = useAuth();
+  const { user, logout, loading } = useAuth();
   const [state, setState] = useState<AppState>("upload");
   const [analysisId, setAnalysisId] = useState<string>("");
   const [analysisError, setAnalysisError] = useState("");
   const [authView, setAuthView] = useState<"login" | "register">("login");
+
+  if (loading) {
+    return (
+      <div className="app">
+        <div className="loading-screen">
+          <div className="spinner" />
+          <p>Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!user) {
     return (
@@ -103,12 +123,7 @@ function MainApp() {
     );
   }
 
-  const handleUploadComplete = async (data: {
-    analysisId: string;
-    columns: string[];
-    rowCount: number;
-    filename: string;
-  }) => {
+  const handleUploadComplete = async (data: UploadData) => {
     setState("analyzing");
     setAnalysisError("");
 
@@ -116,19 +131,15 @@ function MainApp() {
       const textCol = data.columns.find((c) => /review|text|comment|feedback|content/i.test(c)) || data.columns[0];
       const ratingCol = data.columns.find((c) => /rating|score|star|rank/i.test(c)) || "";
 
-      const token = localStorage.getItem("auth");
-      const parsed = token ? JSON.parse(token) : null;
-
       const res = await fetch("/api/analyze", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(parsed?.token ? { Authorization: `Bearer ${parsed.token}` } : {}),
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           analysis_id: data.analysisId,
           text_column: textCol,
           rating_column: ratingCol,
+          custom_categories: data.customCategories || null,
+          use_transformer: data.useTransformer || false,
         }),
       });
 

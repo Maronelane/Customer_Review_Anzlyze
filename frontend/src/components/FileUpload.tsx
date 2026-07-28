@@ -7,6 +7,8 @@ interface Props {
     rowCount: number;
     preview: Record<string, unknown>[];
     filename: string;
+    customCategories?: Record<string, string[]>;
+    useTransformer?: boolean;
   }) => void;
 }
 
@@ -90,14 +92,14 @@ export default function FileUpload({ onUploadComplete }: Props) {
         cats[c.name.toLowerCase().replace(/\s+/g, "_")] = c.keywords.split(",").map((k) => k.trim().toLowerCase());
       }
     });
-    (window as unknown as { _customCategories: Record<string, string[]> })._customCategories = Object.keys(cats).length > 0 ? cats : undefined;
-    (window as unknown as { _useTransformer: boolean })._useTransformer = useTransformer;
     onUploadComplete({
       analysisId,
       columns,
       rowCount,
       preview,
       filename,
+      customCategories: Object.keys(cats).length > 0 ? cats : undefined,
+      useTransformer,
     });
   };
 
