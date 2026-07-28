@@ -359,26 +359,32 @@ def trend_analysis(analysis_id):
 
         df = read_file_to_df(filepath, analysis.get("stored_path", ""))
         date_col = None
+
         for col in df.columns:
-            if df[col].dtype == "object":
-                sample = df[col].dropna().iloc[:50] if len(df[col].dropna()) > 50 else df[col].dropna()
+            dtype = df[col].dtype
+            if dtype == "datetime64[ns]" or dtype == "<M8[ns]":
+                date_col = col
+                break
+            if dtype == "object" or str(dtype).startswith("int") or str(dtype).startswith("float"):
+                sample = df[col].dropna()
                 if len(sample) < 3:
                     continue
-                parsed = pd.to_datetime(sample, errors="coerce")
-                if parsed.notna().sum() > len(sample) * 0.5:
+                parsed = pd.to_datetime(sample.astype(str), errors="coerce")
+                if parsed.notna().sum() > min(len(sample) * 0.1, 3):
                     date_col = col
                     break
 
         if not date_col:
             return jsonify({"trend": [], "message": "No date column detected"})
 
-        dates = pd.to_datetime(df[date_col], errors="coerce")
+        valid_dates = pd.to_datetime(df[date_col], errors="coerce")
         predictions_list = predictions_data.get("predictions", [])
+
         trend: dict[str, dict] = {}
         for i, pred in enumerate(predictions_list):
-            if i >= len(dates) or pd.isna(dates[i]):
+            if pd.isna(valid_dates.iloc[i]):
                 continue
-            date_key = dates[i].strftime("%Y-%m-%d")
+            date_key = valid_dates.iloc[i].strftime("%Y-%m-%d")
             if date_key not in trend:
                 trend[date_key] = {"date": date_key, "positive": 0, "negative": 0, "neutral": 0, "total": 0}
             sentiment = pred.get("sentiment", "neutral")
