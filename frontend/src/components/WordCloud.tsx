@@ -31,8 +31,20 @@ export default function WordCloud({ analysisId }: Props) {
     return words.filter((w) => {
       const val = w[active as keyof WordFreq];
       return typeof val === "number" && val > 0;
-    });
+    }).map((w) => {
+      const total = (w.positive + w.negative + w.neutral) || 1;
+      const pct = w[active as keyof WordFreq] as number;
+      return { ...w, _relevance: pct / total };
+    }).sort((a, b) => (b._relevance || 0) - (a._relevance || 0));
   }, [words, active]);
+
+  const getWordColor = (w: WordFreq): string => {
+    if (active !== "all") return SENTIMENT_COLORS[active];
+    const max = Math.max(w.positive, w.negative, w.neutral);
+    if (max === w.negative && w.negative > 0) return SENTIMENT_COLORS.negative;
+    if (max === w.positive && w.positive > 0) return SENTIMENT_COLORS.positive;
+    return SENTIMENT_COLORS.neutral;
+  };
 
   if (words.length === 0) return null;
 
@@ -56,15 +68,13 @@ export default function WordCloud({ analysisId }: Props) {
         {filtered.map((w) => {
           const ratio = w.total / maxCount;
           const size = MIN_SIZE + ratio * (MAX_SIZE - MIN_SIZE);
-          const color = active === "all"
-            ? (w.negative >= w.positive ? SENTIMENT_COLORS.negative : SENTIMENT_COLORS.positive)
-            : SENTIMENT_COLORS[active];
+          const color = getWordColor(w);
           return (
             <span
               key={w.word}
               className="wordcloud-word"
               style={{ fontSize: `${size}px`, color, opacity: 0.3 + ratio * 0.7 }}
-              title={`${w.word} — Total: ${w.total}, Positive: ${w.positive}, Negative: ${w.negative}`}
+              title={`${w.word} — Total: ${w.total}, Positive: ${w.positive}, Negative: ${w.negative}, Neutral: ${w.neutral}`}
             >
               {w.word}
             </span>

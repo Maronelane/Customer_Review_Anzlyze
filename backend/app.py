@@ -361,22 +361,19 @@ def trend_analysis(analysis_id):
         date_col = None
         for col in df.columns:
             if df[col].dtype == "object":
-                sample = df[col].dropna().iloc[:5].tolist()
-                if sample:
-                    import re
-                    date_pattern = re.compile(r"\d{1,4}[-/]\d{1,2}[-/]\d{1,4}|[A-Z][a-z]{2,9}\s+\d{1,2},?\s+\d{4}", re.I)
-                    if any(date_pattern.search(str(s)) for s in sample):
-                        date_col = col
-                        break
+                sample = df[col].dropna().iloc[:50] if len(df[col].dropna()) > 50 else df[col].dropna()
+                if len(sample) < 3:
+                    continue
+                parsed = pd.to_datetime(sample, errors="coerce")
+                if parsed.notna().sum() > len(sample) * 0.5:
+                    date_col = col
+                    break
 
         if not date_col:
             return jsonify({"trend": [], "message": "No date column detected"})
 
         dates = pd.to_datetime(df[date_col], errors="coerce")
         predictions_list = predictions_data.get("predictions", [])
-        if len(predictions_list) != len(dates):
-            return jsonify({"trend": [], "message": "Prediction count mismatch"})
-
         trend: dict[str, dict] = {}
         for i, pred in enumerate(predictions_list):
             if i >= len(dates) or pd.isna(dates[i]):

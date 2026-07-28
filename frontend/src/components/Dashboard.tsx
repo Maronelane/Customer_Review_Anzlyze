@@ -131,10 +131,12 @@ export default function Dashboard({ analysisId, onReset }: Props) {
           />
           <TrendChart analysisId={analysisId} />
           <WordCloud analysisId={analysisId} />
-          <ProblemList
-            problems={results.problems?.problems ?? []}
-            topWords={results.problems?.top_complaint_words ?? []}
-          />
+          <div className="full-width">
+            <ProblemList
+              problems={results.problems?.problems ?? []}
+              topWords={results.problems?.top_complaint_words ?? []}
+            />
+          </div>
           <div className="full-width">
             <Recommendations
               recommendations={results.recommendations?.recommendations ?? []}

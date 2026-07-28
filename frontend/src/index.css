@@ -475,14 +475,18 @@ body {
   grid-column: 1 / -1;
 }
 
-@media (max-width: 768px) {
+.dashboard-grid .span-2 {
+  grid-column: span 2;
+}
+
+@media (max-width: 900px) {
   .dashboard-grid {
     grid-template-columns: 1fr;
   }
-  .app-header {
-    flex-direction: column;
-    gap: 8px;
+  .dashboard-grid .span-2 {
+    grid-column: span 1;
   }
+}
   .config-fields {
     grid-template-columns: 1fr;
   }
