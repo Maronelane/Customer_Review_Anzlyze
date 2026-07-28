@@ -4,6 +4,7 @@ Provides REST API for dataset upload, ML analysis, results retrieval,
 authentication, export, email, comparison, and re-run.
 """
 import os
+import re
 import uuid
 
 import pandas as pd
@@ -338,6 +339,143 @@ def predictions(analysis_id):
         return jsonify(data)
     except Exception as e:
         return jsonify({"error": f"Failed to fetch predictions: {str(e)}"}), 500
+
+
+# ──────────────────────────────────────────────
+# Trend Analysis
+# ──────────────────────────────────────────────
+@app.route("/api/trend/<analysis_id>")
+def trend_analysis(analysis_id):
+    """Get sentiment distribution over time if dataset has a date column."""
+    try:
+        analysis = get_analysis(analysis_id)
+        if not analysis:
+            return jsonify({"error": "Analysis not found"}), 404
+
+        predictions_data = get_predictions(analysis_id, limit=10000)
+        filepath = os.path.join(UPLOAD_DIR, analysis.get("stored_path", ""))
+        if not os.path.exists(filepath):
+            return jsonify({"error": "Dataset file not found"}), 404
+
+        df = read_file_to_df(filepath, analysis.get("stored_path", ""))
+        date_col = None
+        for col in df.columns:
+            if df[col].dtype == "object":
+                sample = df[col].dropna().iloc[:5].tolist()
+                if sample:
+                    import re
+                    date_pattern = re.compile(r"\d{1,4}[-/]\d{1,2}[-/]\d{1,4}|[A-Z][a-z]{2,9}\s+\d{1,2},?\s+\d{4}", re.I)
+                    if any(date_pattern.search(str(s)) for s in sample):
+                        date_col = col
+                        break
+
+        if not date_col:
+            return jsonify({"trend": [], "message": "No date column detected"})
+
+        dates = pd.to_datetime(df[date_col], errors="coerce")
+        predictions_list = predictions_data.get("predictions", [])
+        if len(predictions_list) != len(dates):
+            return jsonify({"trend": [], "message": "Prediction count mismatch"})
+
+        trend: dict[str, dict] = {}
+        for i, pred in enumerate(predictions_list):
+            if i >= len(dates) or pd.isna(dates[i]):
+                continue
+            date_key = dates[i].strftime("%Y-%m-%d")
+            if date_key not in trend:
+                trend[date_key] = {"date": date_key, "positive": 0, "negative": 0, "neutral": 0, "total": 0}
+            sentiment = pred.get("sentiment", "neutral")
+            trend[date_key][sentiment] += 1
+            trend[date_key]["total"] += 1
+
+        sorted_trend = sorted(trend.values(), key=lambda x: x["date"])
+        return jsonify({"trend": sorted_trend, "message": None})
+    except Exception as e:
+        return jsonify({"error": f"Trend analysis failed: {str(e)}"}), 500
+
+
+# ──────────────────────────────────────────────
+# Word Frequency
+# ──────────────────────────────────────────────
+@app.route("/api/word-frequency/<analysis_id>")
+def word_frequency(analysis_id):
+    """Get word frequency counts from analyzed reviews."""
+    try:
+        analysis = get_analysis(analysis_id)
+        if not analysis:
+            return jsonify({"error": "Analysis not found"}), 404
+
+        predictions_data = get_predictions(analysis_id, limit=10000)
+        predictions = predictions_data.get("predictions", [])
+
+        from collections import Counter
+        from nltk.corpus import stopwords
+        stop_words = set(stopwords.words("english"))
+
+        word_counts: dict[str, dict] = {}
+        for pred in predictions:
+            text = str(pred.get("review_text", ""))
+            sentiment = pred.get("sentiment", "neutral")
+            cleaned = re.sub(r"[^\w\s]", "", text.lower())
+            for word in cleaned.split():
+                if len(word) > 2 and word not in stop_words and word.isalpha():
+                    if word not in word_counts:
+                        word_counts[word] = {"word": word, "total": 0, "positive": 0, "negative": 0, "neutral": 0}
+                    word_counts[word]["total"] += 1
+                    word_counts[word][sentiment] += 1
+
+        sorted_words = sorted(word_counts.values(), key=lambda x: x["total"], reverse=True)[:100]
+        return jsonify({"words": sorted_words})
+    except Exception as e:
+        return jsonify({"error": f"Word frequency failed: {str(e)}"}), 500
+
+
+# ──────────────────────────────────────────────
+# AI Summary
+# ──────────────────────────────────────────────
+@app.route("/api/summary/<analysis_id>")
+def ai_summary(analysis_id):
+    """Generate an executive summary using the transformer model."""
+    try:
+        analysis = get_analysis(analysis_id)
+        if not analysis:
+            return jsonify({"error": "Analysis not found"}), 404
+
+        results_data = get_results(analysis_id)
+        if not results_data:
+            return jsonify({"error": "Results not ready"}), 404
+
+        dist = results_data.get("sentiment_distribution", {})
+        total = dist.get("total", 0)
+        pos = dist.get("positive", 0)
+        neg = dist.get("negative", 0)
+        neu = dist.get("neutral", 0)
+        pos_pct = round(pos / max(total, 1) * 100, 1)
+        neg_pct = round(neg / max(total, 1) * 100, 1)
+
+        problems = results_data.get("problems", {}).get("problems", [])
+        top_problems = [p["category"] for p in problems[:3]]
+        top_problems_str = ", ".join(top_problems) if top_problems else "no major issues detected"
+
+        text_to_summarize = (
+            f"Customer review analysis of {total} reviews shows {pos_pct}% positive, "
+            f"{neg_pct}% negative, and {round(neu / max(total, 1) * 100, 1)}% neutral sentiment. "
+            f"Top issues: {top_problems_str}. "
+            f"Overall customer feedback indicates {('strong satisfaction' if pos_pct > 60 else 'mixed feelings' if pos_pct > 40 else 'significant concerns')}."
+        )
+
+        set_progress(analysis_id, "Generating AI summary", 95)
+        try:
+            from transformers import pipeline as hf_pipeline
+            summarizer = hf_pipeline("summarization", model="facebook/bart-large-cnn", device=-1)
+            summary_result = summarizer(text_to_summarize, max_length=80, min_length=20, do_sample=False)
+            summary_text = summary_result[0]["summary_text"]
+        except Exception:
+            summary_text = text_to_summarize
+
+        return jsonify({"summary": summary_text})
+    except Exception as e:
+        return jsonify({"error": f"Summary generation failed: {str(e)}"}), 500
 
 
 # ──────────────────────────────────────────────

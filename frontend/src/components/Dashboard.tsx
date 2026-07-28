@@ -6,6 +6,9 @@ import Recommendations from "./Recommendations";
 import ReviewTable from "./ReviewTable";
 import ExportButton from "./ExportButton";
 import EmailModal from "./EmailModal";
+import TrendChart from "./TrendChart";
+import WordCloud from "./WordCloud";
+import SummaryPanel from "./SummaryPanel";
 
 interface Props {
   analysisId: string;
@@ -120,11 +123,14 @@ export default function Dashboard({ analysisId, onReset }: Props) {
 
       {activeTab === "overview" ? (
         <div className="dashboard-grid">
+          <SummaryPanel analysisId={analysisId} />
           <SentimentChart
             distribution={results.sentiment_distribution}
             bestModel={results.best_model}
             bestAccuracy={results.best_accuracy}
           />
+          <TrendChart analysisId={analysisId} />
+          <WordCloud analysisId={analysisId} />
           <ProblemList
             problems={results.problems?.problems ?? []}
             topWords={results.problems?.top_complaint_words ?? []}

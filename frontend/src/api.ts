@@ -194,3 +194,31 @@ export function rerunAnalysis(analysisId: string, textColumn?: string, ratingCol
     }),
   });
 }
+
+export interface TrendPoint {
+  date: string;
+  positive: number;
+  negative: number;
+  neutral: number;
+  total: number;
+}
+
+export function getTrend(analysisId: string) {
+  return apiFetch<{ trend: TrendPoint[]; message: string | null }>(`/trend/${analysisId}`);
+}
+
+export interface WordFreq {
+  word: string;
+  total: number;
+  positive: number;
+  negative: number;
+  neutral: number;
+}
+
+export function getWordFrequency(analysisId: string) {
+  return apiFetch<{ words: WordFreq[] }>(`/word-frequency/${analysisId}`);
+}
+
+export function getAiSummary(analysisId: string) {
+  return apiFetch<{ summary: string }>(`/summary/${analysisId}`);
+}
