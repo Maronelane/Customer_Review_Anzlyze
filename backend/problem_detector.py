@@ -2,6 +2,8 @@
 Problem Detector: Extracts common problems/themes from negative customer reviews.
 Supports custom user-defined categories.
 """
+import re
+import string
 from collections import Counter
 
 
@@ -32,7 +34,12 @@ def detect_problems(predictions: list[dict], feature_names: list[str], top_n: in
             "top_complaint_words": [],
         }
 
-    negative_texts = " ".join([p["cleaned"] for p in negative_reviews])
+    def _clean_for_freq(text: str) -> str:
+        text = text.lower()
+        text = text.translate(str.maketrans("", "", string.punctuation))
+        return re.sub(r"\s+", " ", text).strip()
+
+    negative_texts = " ".join([_clean_for_freq(p["cleaned"]) for p in negative_reviews])
     words = negative_texts.split()
     word_freq = Counter(words).most_common(50)
 
@@ -46,7 +53,7 @@ def detect_problems(predictions: list[dict], feature_names: list[str], top_n: in
             if word in cat_keywords:
                 score += freq
         for review in negative_reviews:
-            text_lower = review["cleaned"].lower()
+            text_lower = _clean_for_freq(review["cleaned"])
             for keyword in cat_keywords:
                 if keyword in text_lower:
                     if len(examples) < 3:
@@ -60,7 +67,7 @@ def detect_problems(predictions: list[dict], feature_names: list[str], top_n: in
     if feature_names and len(negative_reviews) > 0:
         neg_words = Counter()
         for review in negative_reviews:
-            for word in review["cleaned"].split():
+            for word in _clean_for_freq(review["cleaned"]).split():
                 if word in feature_names:
                     neg_words[word] += 1
         top_tfidf_words = [{"word": w, "count": c} for w, c in neg_words.most_common(top_n)]

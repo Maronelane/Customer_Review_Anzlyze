@@ -126,6 +126,27 @@ def generate_recommendations(problems: list[dict], sentiment_distribution: dict)
                 "impact": template["impact"],
                 "examples": problem.get("examples", []),
             })
+        else:
+            adjusted_priority = problem.get("severity", "medium")
+            if problem.get("severity") == "high" and negative_pct > 30:
+                adjusted_priority = "critical"
+
+            recommendations.append({
+                "title": f"Address: {problem['category']}",
+                "priority": adjusted_priority,
+                "problem_category": problem["category"],
+                "problem_frequency": problem["frequency"],
+                "problem_percentage": problem["percentage"],
+                "suggestions": [
+                    f"Investigate customer complaints related to '{problem['category']}'.",
+                    f"Review {problem['frequency']} mentions across negative reviews for common themes.",
+                    "Gather more detailed feedback on this issue from affected customers.",
+                    "Develop an action plan to address the root cause.",
+                    "Monitor trends over time to measure improvement.",
+                ],
+                "impact": f"Addressing '{problem['category']}' concerns can improve overall customer satisfaction.",
+                "examples": problem.get("examples", []),
+            })
 
     recommendations.sort(key=lambda x: {"critical": 0, "high": 1, "medium": 2, "low": 3}.get(x["priority"], 4))
 
