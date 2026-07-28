@@ -117,7 +117,10 @@ def save_predictions(analysis_id: str, predictions: list[dict]):
 
 def get_analysis(analysis_id: str):
     db = get_db()
-    return db.analyses.find_one({"_id": analysis_id})
+    doc = db.analyses.find_one({"_id": analysis_id})
+    if doc:
+        doc["id"] = doc.pop("_id")
+    return doc
 
 
 def get_results(analysis_id: str):
@@ -140,8 +143,13 @@ def get_predictions(analysis_id: str, limit: int = 100, offset: int = 0, sentime
 
 def list_analyses(user_id: str = None):
     db = get_db()
-    query = {"user_id": user_id} if user_id else {}
-    return list(db.analyses.find(query).sort("created_at", -1))
+    query: dict = {"status": "completed"}
+    if user_id:
+        query["user_id"] = user_id
+    docs = list(db.analyses.find(query).sort("created_at", -1))
+    for doc in docs:
+        doc["id"] = doc.pop("_id")
+    return docs
 
 
 # ── Progress Tracking ──
