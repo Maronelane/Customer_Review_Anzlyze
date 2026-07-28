@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+*.db
+saved_models/
+uploads/
+.env
+
+# Node
+node_modules/
+frontend/dist/
+frontend/.vite/
+
+# OS
+.DS_Store
+Thumbs.db
