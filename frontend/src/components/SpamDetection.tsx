@@ -47,12 +47,21 @@ export default function SpamDetection({ analysisId }: Props) {
   const [data, setData] = useState<SpamData | null>(null);
   const [expanded, setExpanded] = useState<number | null>(null);
   const [showAll, setShowAll] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getSpamSummary(analysisId).then(setData).catch(() => {});
+    setLoading(true);
+    getSpamSummary(analysisId)
+      .then(setData)
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, [analysisId]);
 
-  if (!data) return null;
+  if (loading) {
+    return <div className="spam-loading">Loading spam analysis...</div>;
+  }
+
+  if (!data) return <p className="spam-empty">Spam data unavailable.</p>;
 
   const ss = data.spam_summary as SpamSummary | undefined;
   const flagged_reviews = data.flagged_reviews || [];

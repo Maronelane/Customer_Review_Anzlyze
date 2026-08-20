@@ -22,11 +22,14 @@ export default function RootCauseClusters({ analysisId }: Props) {
   const [selectedCluster, setSelectedCluster] = useState<number | null>(null);
   const [reviews, setReviews] = useState<Prediction[]>([]);
   const [loadingReviews, setLoadingReviews] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    setLoading(true);
     getClusters(analysisId)
       .then(setData)
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, [analysisId]);
 
   useEffect(() => {
@@ -41,7 +44,13 @@ export default function RootCauseClusters({ analysisId }: Props) {
       .finally(() => setLoadingReviews(false));
   }, [analysisId, selectedCluster]);
 
-  if (!data || data.clusters.length === 0) return null;
+  if (loading) {
+    return <div className="cluster-loading">Loading clusters...</div>;
+  }
+
+  if (!data || data.clusters.length === 0) {
+    return <p className="cluster-empty">No complaint clusters detected.</p>;
+  }
 
   const selected = data.clusters.find((c) => c.cluster_id === selectedCluster);
 

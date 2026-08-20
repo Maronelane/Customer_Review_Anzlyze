@@ -22,11 +22,14 @@ function seededRandom(seed: number) {
 export default function WordCloud({ analysisId }: Props) {
   const [words, setWords] = useState<WordFreq[]>([]);
   const [active, setActive] = useState<string>("all");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    setLoading(true);
     getWordFrequency(analysisId)
-      .then((res) => setWords(res.words.slice(0, 80)))
-      .catch(() => {});
+      .then((res) => setWords(res.words?.slice(0, 80) || []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, [analysisId]);
 
   const maxCount = useMemo(() => Math.max(...words.map((w) => w.total), 1), [words]);
@@ -54,7 +57,13 @@ export default function WordCloud({ analysisId }: Props) {
     return SENTIMENT_COLORS.neutral;
   };
 
-  if (words.length === 0) return null;
+  if (loading) {
+    return <div className="wordcloud-loading">Loading word cloud...</div>;
+  }
+
+  if (words.length === 0) {
+    return <p className="wordcloud-empty">No word frequency data available.</p>;
+  }
 
   const tabs = ["all", "positive", "negative", "neutral"];
 

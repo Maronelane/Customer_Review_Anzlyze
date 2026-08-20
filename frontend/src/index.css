@@ -1669,12 +1669,29 @@ body {
 
 .collapsible-body {
   padding: 0 18px 18px;
-  animation: fadeIn 0.2s ease;
 }
 
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(-4px); }
-  to { opacity: 1; transform: translateY(0); }
+/* ── Component Loading / Empty States ── */
+.trend-loading,
+.wordcloud-loading,
+.spam-loading,
+.cluster-loading {
+  font-size: 13px;
+  color: var(--text-muted);
+  padding: 20px 0;
+  text-align: center;
+  animation: pulse 1.5s infinite;
+}
+
+.trend-empty,
+.wordcloud-empty,
+.spam-empty,
+.cluster-empty {
+  font-size: 13px;
+  color: var(--text-muted);
+  padding: 20px 0;
+  text-align: center;
+  font-style: italic;
 }
 
 /* ── Spam Detection Card ── */
