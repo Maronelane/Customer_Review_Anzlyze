@@ -10,7 +10,6 @@ import TrendChart from "./TrendChart";
 import WordCloud from "./WordCloud";
 import SummaryPanel from "./SummaryPanel";
 import SpamDetection from "./SpamDetection";
-import RootCauseClusters from "./RootCauseClusters";
 import ErrorBoundary from "./ErrorBoundary";
 import CollapsibleCard from "./CollapsibleCard";
 
@@ -173,11 +172,6 @@ export default function Dashboard({ analysisId, onReset }: Props) {
               subtitle={results.best_model?.replace("_", " ") || undefined}
             >
               <SpamDetection analysisId={analysisId} />
-            </CollapsibleCard>
-          </ErrorBoundary>
-          <ErrorBoundary>
-            <CollapsibleCard title="Root Cause Clusters">
-              <RootCauseClusters analysisId={analysisId} />
             </CollapsibleCard>
           </ErrorBoundary>
           <div className="grid-span-full">
