@@ -142,15 +142,19 @@ def detect_problems(predictions: list[dict], feature_names: list[str], top_n: in
 
     results = []
     total_neg_count = max(len(negative_reviews), 1)
+    MIN_PERCENTAGE = 3.0  # only show categories that affect at least 3% of negative reviews
     for category, score in sorted_problems:
-        severity = "high" if score > total_neg_count * 0.3 else "medium" if score > total_neg_count * 0.1 else "low"
+        pct = round(score / total_neg_count * 100, 1)
+        if pct < MIN_PERCENTAGE:
+            continue
+        severity = "high" if pct >= 30 else "medium" if pct >= 10 else "low"
         is_custom = bool(custom_categories and category in custom_categories)
         results.append({
             "category": category.replace("_", " ").title(),
             "category_key": category,
             "frequency": score,
             "severity": severity,
-            "percentage": round(score / total_neg_count * 100, 1),
+            "percentage": pct,
             "examples": problem_examples.get(category, []),
             "is_custom": is_custom,
         })
