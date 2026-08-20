@@ -170,7 +170,7 @@ export default function Dashboard({ analysisId, onReset }: Props) {
           <ErrorBoundary>
             <CollapsibleCard
               title="Spam / Fake Detection"
-              badge={results.best_accuracy ? undefined : undefined}
+              subtitle={results.best_model?.replace("_", " ") || undefined}
             >
               <SpamDetection analysisId={analysisId} />
             </CollapsibleCard>

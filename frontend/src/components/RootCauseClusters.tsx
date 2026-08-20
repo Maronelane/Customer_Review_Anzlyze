@@ -55,12 +55,7 @@ export default function RootCauseClusters({ analysisId }: Props) {
   const selected = data.clusters.find((c) => c.cluster_id === selectedCluster);
 
   return (
-    <div className="insight-card cluster-card">
-      <div className="cluster-header">
-        <h3>Root Cause Clustering</h3>
-        <span className="cluster-count-badge">{data.total_clusters} clusters</span>
-      </div>
-
+    <>
       <p className="cluster-description">
         Similar complaints are grouped into root cause clusters. Click a cluster to see contributing reviews.
       </p>
@@ -152,6 +147,6 @@ export default function RootCauseClusters({ analysisId }: Props) {
           )}
         </div>
       )}
-    </div>
+    </>
   );
 }

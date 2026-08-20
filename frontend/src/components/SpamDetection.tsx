@@ -81,12 +81,7 @@ export default function SpamDetection({ analysisId }: Props) {
     .slice(0, 5);
 
   return (
-    <div className="card spam-card">
-      <div className="card-header">
-        <h3>Spam / Fake Review Detection</h3>
-        <div className={`risk-badge ${riskLevel}`}>{riskLevel} risk</div>
-      </div>
-
+    <>
       <div className="spam-overview">
         <div className="spam-donut-wrapper">
           <svg viewBox="0 0 100 100" className="spam-donut">
@@ -196,6 +191,6 @@ export default function SpamDetection({ analysisId }: Props) {
           <p>All {(ss?.total_reviews ?? 0).toLocaleString()} reviews appear genuine. No suspicious activity detected.</p>
         </div>
       )}
-    </div>
+    </>
   );
 }

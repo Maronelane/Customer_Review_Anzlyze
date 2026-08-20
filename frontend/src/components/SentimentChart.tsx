@@ -20,15 +20,7 @@ export default function SentimentChart({ distribution, bestModel, bestAccuracy }
   const pct = (n: number) => ((n / total) * 100).toFixed(1);
 
   return (
-    <div className="card sentiment-card">
-      <div className="card-header">
-        <h3>Sentiment Distribution</h3>
-        <div className="model-badge">
-          <span className="model-name">{bestModel?.replace("_", " ") || "N/A"}</span>
-          <span className="model-acc">{bestAccuracy != null ? `${(bestAccuracy * 100).toFixed(1)}% acc` : "—"}</span>
-        </div>
-      </div>
-
+    <>
       <div className="sentiment-donut-wrapper">
         <svg viewBox="0 0 120 120" className="sentiment-donut">
           {(() => {
@@ -104,7 +96,7 @@ export default function SentimentChart({ distribution, bestModel, bestAccuracy }
           ? "Significant negative sentiment — action recommended."
           : "Mixed sentiment across reviews."}
       </div>
-    </div>
+    </>
   );
 }
 
