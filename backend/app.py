@@ -63,8 +63,53 @@ def read_file_to_df(filepath: str, filename: str) -> pd.DataFrame:
     elif ext in ("xlsx", "xls"):
         return pd.read_excel(filepath)
     elif ext == "json":
-        return pd.read_json(filepath)
+        return _read_json(filepath)
     return pd.read_csv(filepath)
+
+
+def _read_json(filepath: str) -> pd.DataFrame:
+    """Read JSON into a DataFrame, handling multiple formats."""
+    with open(filepath, "r", encoding="utf-8") as f:
+        raw = f.read().strip()
+    if not raw:
+        raise ValueError("JSON file is empty")
+
+    # Try standard JSON first
+    try:
+        return pd.read_json(filepath)
+    except (ValueError, TypeError):
+        pass
+
+    # Try JSON Lines (one object per line)
+    try:
+        return pd.read_json(filepath, lines=True)
+    except (ValueError, TypeError):
+        pass
+
+    # Manual parse: handle array of objects or JSONL
+    import json as _json
+    try:
+        data = _json.loads(raw)
+    except _json.JSONDecodeError as e:
+        raise ValueError(f"Invalid JSON: {e}") from e
+
+    if isinstance(data, list):
+        if len(data) == 0:
+            raise ValueError("JSON file contains an empty array")
+        # If items are dicts, normalize; if strings, wrap in a single column
+        if isinstance(data[0], dict):
+            return pd.json_normalize(data)
+        return pd.DataFrame({"text": data})
+
+    if isinstance(data, dict):
+        # Could be a single object or a dict of arrays
+        for v in data.values():
+            if isinstance(v, list) and len(v) > 0:
+                return pd.DataFrame(data)
+        # Single dict => wrap
+        return pd.DataFrame([data])
+
+    raise ValueError(f"Unsupported JSON structure: {type(data).__name__}")
 
 
 # ──────────────────────────────────────────────
