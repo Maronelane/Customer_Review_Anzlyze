@@ -184,6 +184,7 @@ def train_models(df: pd.DataFrame, text_column: str, rating_column: Optional[str
         labels = _generate_labels_from_text(cleaned_texts)
 
     df_model = pd.DataFrame({'text': cleaned_texts, 'label': labels})
+    df_model['text'] = df_model['text'].fillna("").astype(str)
     df_model = df_model[df_model['text'].str.strip() != ""] # Drop empty texts
 
     if len(df_model) < 5:

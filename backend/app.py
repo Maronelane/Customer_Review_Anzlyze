@@ -68,8 +68,7 @@ def read_file_to_df(filepath: str, filename: str) -> pd.DataFrame:
         df = pd.read_csv(filepath)
 
     for col in df.columns:
-        if df[col].dtype == float or df[col].dtype == object:
-            df[col] = df[col].apply(lambda x: "" if pd.isna(x) else str(x))
+        df[col] = df[col].apply(lambda x: "" if x is None or (isinstance(x, float) and pd.isna(x)) else str(x))
     return df
 
 

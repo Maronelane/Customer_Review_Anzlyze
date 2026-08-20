@@ -165,7 +165,7 @@ def compute_spam_score(text: str, sentiment: str = "neutral") -> float:
 def detect_spam(predictions: list[dict], threshold: float = 0.55) -> list[dict]:
     """Add spam_score and is_flagged to each prediction dict. Returns the same list."""
     for pred in predictions:
-        text = pred.get("text", pred.get("review_text", ""))
+        text = str(pred.get("text", pred.get("review_text", "")))
         sentiment = pred.get("sentiment", "neutral")
         score = compute_spam_score(text, sentiment)
         pred["spam_score"] = score
@@ -177,7 +177,7 @@ def detect_duplicates(predictions: list[dict]) -> list[dict]:
     """Mark exact duplicate reviews as flagged."""
     seen: dict[str, int] = {}
     for pred in predictions:
-        text = pred.get("text", pred.get("review_text", "")).strip().lower()
+        text = str(pred.get("text", pred.get("review_text", ""))).strip().lower()
         if text in seen:
             seen[text] += 1
             pred["is_flagged"] = True

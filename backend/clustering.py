@@ -78,7 +78,7 @@ def cluster_reviews(
         sampled = clusterable
         sampled_indices = list(range(len(clusterable)))
 
-    texts = [_clean_for_clustering(p.get("text", p.get("review_text", ""))) for _, p in sampled]
+    texts = [_clean_for_clustering(str(p.get("text", p.get("review_text", "")))) for _, p in sampled]
     texts = [t for t in texts if len(t) > 5]
 
     if len(texts) < min_cluster_size * 2:

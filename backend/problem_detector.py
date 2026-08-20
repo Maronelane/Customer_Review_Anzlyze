@@ -87,8 +87,8 @@ def detect_problems(predictions: list[dict], feature_names: list[str], top_n: in
         score = 0
         examples = []
         for review in negative_reviews:
-            raw_text = review.get("text", "")
-            cleaned_text = review.get("cleaned", "")
+            raw_text = str(review.get("text", ""))
+            cleaned_text = str(review.get("cleaned", ""))
             # Keep underscores intact during frequency cleanup
             text_lower = _clean_for_freq(cleaned_text + " " + raw_text)
             review_snippet = raw_text[:200]
