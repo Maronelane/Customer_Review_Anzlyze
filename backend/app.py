@@ -952,6 +952,40 @@ def rerun():
             "flagged_percentage": round(spam_count / max(len(ml_results["predictions"]), 1) * 100, 1),
         }
 
+        model_runs = {}
+        all_preds = ml_results.get("all_model_predictions", {})
+        all_dists = ml_results.get("all_model_distributions", {})
+        for m_name, m_preds in all_preds.items():
+            m_dist = all_dists.get(m_name, ml_results["sentiment_distribution"])
+            detect_spam(m_preds)
+            detect_duplicates(m_preds)
+            m_spam_count = sum(1 for p in m_preds if p.get("is_flagged"))
+            m_total = len(m_preds)
+            try:
+                cluster_reviews(m_preds)
+                m_cluster_summary = get_cluster_summary(m_preds)
+            except Exception:
+                m_cluster_summary = []
+            m_problems = detect_problems(m_preds, ml_results["feature_names"], custom_categories=custom_categories)
+            m_recommendations = generate_recommendations(
+                problems=m_problems.get("problems", []),
+                sentiment_distribution=m_dist,
+                top_complaint_words=m_problems.get("top_complaint_words", []),
+                negative_review_sample=m_problems.get("negative_review_sample", []),
+            )
+            model_runs[m_name] = {
+                "sentiment_distribution": m_dist,
+                "problems": m_problems,
+                "recommendations": m_recommendations,
+                "spam_summary": {
+                    "total_flagged": m_spam_count,
+                    "total_reviews": m_total,
+                    "flagged_percentage": round(m_spam_count / max(m_total, 1) * 100, 1),
+                },
+                "cluster_summary": m_cluster_summary,
+                "predictions": m_preds,
+            }
+
         save_data = {
             "best_model": ml_results["best_model"],
             "best_accuracy": ml_results["best_accuracy"],
@@ -961,9 +995,12 @@ def rerun():
             "model_results": ml_results["models"],
             "spam_summary": spam_summary,
             "cluster_summary": cluster_summary,
+            "model_runs": {k: {kk: vv for kk, vv in v.items() if kk != "predictions"} for k, v in model_runs.items()},
         }
         save_results(new_id, save_data)
         save_predictions(new_id, ml_results["predictions"])
+        for m_name, m_data in model_runs.items():
+            save_predictions(new_id, m_data["predictions"], model=m_name)
         update_analysis_status(new_id, "completed", ml_results["sentiment_distribution"]["total"])
         clear_progress(new_id)
 
