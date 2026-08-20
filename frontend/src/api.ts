@@ -161,6 +161,7 @@ export interface Analysis {
 export interface ProgressData {
   step: string;
   percent: number;
+  status?: string;
 }
 
 export function uploadDataset(file: File, textColumn: string, ratingColumn: string) {

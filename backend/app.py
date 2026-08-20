@@ -6,6 +6,7 @@ authentication, export, email, comparison, and re-run.
 import os
 import re
 import uuid
+import threading
 
 import pandas as pd
 from flask import Flask, request, jsonify, send_from_directory
@@ -214,7 +215,7 @@ def upload_dataset():
 # ──────────────────────────────────────────────
 @app.route("/api/analyze", methods=["POST"])
 def analyze():
-    """Run full ML analysis pipeline."""
+    """Start ML analysis pipeline in background thread. Returns immediately."""
     try:
         data = request.get_json() or {}
         analysis_id = data.get("analysis_id")
@@ -230,99 +231,101 @@ def analyze():
         if not analysis:
             return jsonify({"error": "Analysis not found"}), 404
 
-        update_analysis_status(analysis_id, "processing")
-        set_progress(analysis_id, "Loading dataset", 5)
-
         filepath = os.path.join(UPLOAD_DIR, analysis.get("stored_path", ""))
         if not os.path.exists(filepath):
-            update_analysis_status(analysis_id, "error")
             return jsonify({"error": "Dataset file not found on server"}), 404
 
-        df = read_file_to_df(filepath, analysis.get("stored_path", ""))
-        text_col = text_column or analysis.get("text_column") or df.columns[0]
-        rating_col = rating_column or analysis.get("rating_column")
+        update_analysis_status(analysis_id, "processing")
+        set_progress(analysis_id, "Queued for analysis", 2)
 
-        if text_col not in df.columns:
-            update_analysis_status(analysis_id, "error")
-            return jsonify({"error": f"Column '{text_col}' not found. Available: {df.columns.tolist()}"}), 400
+        def _run_pipeline():
+            try:
+                set_progress(analysis_id, "Loading dataset", 5)
+                df = read_file_to_df(filepath, analysis.get("stored_path", ""))
+                text_col = text_column or analysis.get("text_column") or df.columns[0]
+                rating_col = rating_column or analysis.get("rating_column")
 
-        def progress_cb(step, pct):
-            set_progress(analysis_id, step, pct)
+                if text_col not in df.columns:
+                    update_analysis_status(analysis_id, "error")
+                    set_progress(analysis_id, "Error: column not found", 0)
+                    return
 
-        ml_results = run_full_pipeline(df, text_col, rating_col,
-                                       progress_cb=progress_cb,
-                                       custom_categories=custom_categories,
-                                       use_transformer=use_transformer)
+                def progress_cb(step, pct):
+                    set_progress(analysis_id, step, pct)
 
-        set_progress(analysis_id, "Detecting spam & fake reviews", 65)
-        detect_spam(ml_results["predictions"])
-        detect_duplicates(ml_results["predictions"])
+                ml_results = run_full_pipeline(df, text_col, rating_col,
+                                               progress_cb=progress_cb,
+                                               custom_categories=custom_categories,
+                                               use_transformer=use_transformer)
 
-        spam_count = sum(1 for p in ml_results["predictions"] if p.get("is_flagged"))
-        total = len(ml_results["predictions"])
+                set_progress(analysis_id, "Detecting spam & fake reviews", 65)
+                detect_spam(ml_results["predictions"])
+                detect_duplicates(ml_results["predictions"])
 
-        set_progress(analysis_id, "Clustering root causes", 70)
-        cluster_reviews(ml_results["predictions"])
-        cluster_summary = get_cluster_summary(ml_results["predictions"])
+                spam_count = sum(1 for p in ml_results["predictions"] if p.get("is_flagged"))
+                total = len(ml_results["predictions"])
 
-        set_progress(analysis_id, "Detecting problems", 75)
-        problems = detect_problems(
-            ml_results["predictions"],
-            ml_results["feature_names"],
-            custom_categories=custom_categories,
-        )
+                set_progress(analysis_id, "Clustering root causes", 70)
+                try:
+                    cluster_reviews(ml_results["predictions"])
+                    cluster_summary = get_cluster_summary(ml_results["predictions"])
+                except Exception:
+                    cluster_summary = []
 
-        set_progress(analysis_id, "Generating data-driven recommendations", 90)
+                set_progress(analysis_id, "Detecting problems", 75)
+                problems = detect_problems(
+                    ml_results["predictions"],
+                    ml_results["feature_names"],
+                    custom_categories=custom_categories,
+                )
 
-        recommendations = generate_recommendations(
-            problems=problems.get("problems", []),
-            sentiment_distribution=ml_results["sentiment_distribution"],
-            top_complaint_words=problems.get("top_complaint_words", []),
-            negative_review_sample=problems.get("negative_review_sample", []),
-        )
+                set_progress(analysis_id, "Generating data-driven recommendations", 90)
+                recommendations = generate_recommendations(
+                    problems=problems.get("problems", []),
+                    sentiment_distribution=ml_results["sentiment_distribution"],
+                    top_complaint_words=problems.get("top_complaint_words", []),
+                    negative_review_sample=problems.get("negative_review_sample", []),
+                )
 
-        spam_summary = {
-            "total_flagged": spam_count,
-            "total_reviews": total,
-            "flagged_percentage": round(spam_count / max(total, 1) * 100, 1),
-        }
+                spam_summary = {
+                    "total_flagged": spam_count,
+                    "total_reviews": total,
+                    "flagged_percentage": round(spam_count / max(total, 1) * 100, 1),
+                }
 
-        save_data = {
-            "best_model": ml_results["best_model"],
-            "best_accuracy": ml_results["best_accuracy"],
-            "sentiment_distribution": ml_results["sentiment_distribution"],
-            "problems": problems,
-            "recommendations": recommendations,
-            "model_results": ml_results["models"],
-            "spam_summary": spam_summary,
-            "cluster_summary": cluster_summary,
-        }
-        save_results(analysis_id, save_data)
-        save_predictions(analysis_id, ml_results["predictions"])
-        update_analysis_status(analysis_id, "completed", ml_results["sentiment_distribution"]["total"])
+                save_data = {
+                    "best_model": ml_results["best_model"],
+                    "best_accuracy": ml_results["best_accuracy"],
+                    "sentiment_distribution": ml_results["sentiment_distribution"],
+                    "problems": problems,
+                    "recommendations": recommendations,
+                    "model_results": ml_results["models"],
+                    "spam_summary": spam_summary,
+                    "cluster_summary": cluster_summary,
+                }
+                save_results(analysis_id, save_data)
+                save_predictions(analysis_id, ml_results["predictions"])
+                update_analysis_status(analysis_id, "completed", ml_results["sentiment_distribution"]["total"])
 
-        set_progress(analysis_id, "Complete", 100)
+                set_progress(analysis_id, "Complete", 100)
+
+            except Exception as e:
+                try:
+                    update_analysis_status(analysis_id, "error")
+                    set_progress(analysis_id, f"Error: {str(e)[:100]}", 0)
+                except Exception:
+                    pass
+
+        thread = threading.Thread(target=_run_pipeline, daemon=True)
+        thread.start()
 
         return jsonify({
             "analysis_id": analysis_id,
-            "status": "completed",
-            "best_model": ml_results["best_model"],
-            "best_accuracy": ml_results["best_accuracy"],
-            "sentiment_distribution": ml_results["sentiment_distribution"],
-            "problem_count": problems["problem_count"],
-            "total_recommendations": recommendations["total_recommendations"],
-            "spam_count": spam_count,
-            "cluster_count": len(cluster_summary),
-        })
+            "status": "processing",
+        }), 202
 
     except Exception as e:
-        if "analysis_id" in dir():
-            try:
-                update_analysis_status(analysis_id, "error")
-                clear_progress(analysis_id)
-            except Exception:
-                pass
-        return jsonify({"error": f"Analysis failed: {str(e)}"}), 500
+        return jsonify({"error": f"Failed to start analysis: {str(e)}"}), 500
 
 
 # ──────────────────────────────────────────────
@@ -331,7 +334,11 @@ def analyze():
 @app.route("/api/progress/<analysis_id>")
 def progress(analysis_id):
     """Get analysis progress."""
-    return jsonify(get_progress(analysis_id))
+    prog = get_progress(analysis_id)
+    analysis = get_analysis(analysis_id)
+    if analysis:
+        prog["status"] = analysis.get("status", "processing")
+    return jsonify(prog)
 
 
 # ──────────────────────────────────────────────
@@ -810,8 +817,11 @@ def rerun():
         detect_duplicates(ml_results["predictions"])
         spam_count = sum(1 for p in ml_results["predictions"] if p.get("is_flagged"))
 
-        cluster_reviews(ml_results["predictions"])
-        cluster_summary = get_cluster_summary(ml_results["predictions"])
+        try:
+            cluster_reviews(ml_results["predictions"])
+            cluster_summary = get_cluster_summary(ml_results["predictions"])
+        except Exception:
+            cluster_summary = []
 
         problems = detect_problems(ml_results["predictions"], ml_results["feature_names"],
                                    custom_categories=custom_categories)

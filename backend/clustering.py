@@ -1,7 +1,7 @@
 """
 Root Cause Clustering
 Groups similar negative/neutral reviews into root cause clusters using
-TF-IDF vectorization + DBSCAN, with keyword-based dynamic labels.
+TF-IDF vectorization + MiniBatchKMeans (fast), with keyword-based dynamic labels.
 """
 
 import re
@@ -9,12 +9,15 @@ from collections import Counter
 
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.cluster import DBSCAN
-from sklearn.metrics.pairwise import cosine_similarity
+from sklearn.cluster import MiniBatchKMeans
+from sklearn.metrics import silhouette_score
+
+
+MAX_CLUSTERABLE = 3000
+MIN_CLUSTER_SIZE = 3
 
 
 def _clean_for_clustering(text: str) -> str:
-    """Light cleaning for clustering input."""
     text = text.lower()
     text = re.sub(r"[^\w\s]", " ", text)
     text = re.sub(r"\s+", " ", text).strip()
@@ -22,19 +25,19 @@ def _clean_for_clustering(text: str) -> str:
 
 
 def _extract_cluster_label(texts: list[str], top_n: int = 4) -> str:
-    """Extract a descriptive label from cluster's texts using TF-IDF keywords."""
     if not texts:
         return "Uncategorized"
 
+    sample = texts[:200]
     vectorizer = TfidfVectorizer(
-        max_features=500,
+        max_features=300,
         stop_words="english",
         ngram_range=(1, 2),
         min_df=1,
         max_df=0.9,
     )
     try:
-        tfidf_matrix = vectorizer.fit_transform(texts)
+        tfidf_matrix = vectorizer.fit_transform(sample)
     except ValueError:
         return "Uncategorized"
 
@@ -46,36 +49,43 @@ def _extract_cluster_label(texts: list[str], top_n: int = 4) -> str:
     if not keywords:
         return "Uncategorized"
 
-    label_parts = [kw.title() for kw in keywords[:3]]
-    return " / ".join(label_parts)
+    return " / ".join(kw.title() for kw in keywords[:3])
 
 
 def cluster_reviews(
     predictions: list[dict],
-    min_cluster_size: int = 3,
-    eps: float = 0.4,
-    min_samples: int = 2,
+    min_cluster_size: int = MIN_CLUSTER_SIZE,
+    max_k: int = 15,
 ) -> list[dict]:
-    """
-    Cluster negative/neutral reviews and add cluster_id + cluster_label to each.
-    Returns the updated predictions list.
-    """
-
     clusterable = [
         (i, p) for i, p in enumerate(predictions)
         if p.get("sentiment") in ("negative", "neutral")
     ]
 
-    if len(clusterable) < min_cluster_size:
-        for i, p in enumerate(predictions):
-            p["cluster_id"] = -1
-            p["cluster_label"] = ""
+    for i, p in enumerate(predictions):
+        p["cluster_id"] = -1
+        p["cluster_label"] = ""
+
+    if len(clusterable) < min_cluster_size * 2:
         return predictions
 
-    texts = [_clean_for_clustering(p.get("text", p.get("review_text", ""))) for _, p in clusterable]
+    if len(clusterable) > MAX_CLUSTERABLE:
+        import random
+        random.seed(42)
+        sampled_indices = random.sample(range(len(clusterable)), MAX_CLUSTERABLE)
+        sampled = [clusterable[i] for i in sampled_indices]
+    else:
+        sampled = clusterable
+        sampled_indices = list(range(len(clusterable)))
+
+    texts = [_clean_for_clustering(p.get("text", p.get("review_text", ""))) for _, p in sampled]
+    texts = [t for t in texts if len(t) > 5]
+
+    if len(texts) < min_cluster_size * 2:
+        return predictions
 
     vectorizer = TfidfVectorizer(
-        max_features=2000,
+        max_features=1500,
         stop_words="english",
         ngram_range=(1, 2),
         min_df=2,
@@ -85,28 +95,26 @@ def cluster_reviews(
     try:
         tfidf_matrix = vectorizer.fit_transform(texts)
     except ValueError:
-        for i, p in enumerate(predictions):
-            p["cluster_id"] = -1
-            p["cluster_label"] = ""
         return predictions
 
-    similarity_matrix = cosine_similarity(tfidf_matrix)
-    distance_matrix = 1 - similarity_matrix
-    np.fill_diagonal(distance_matrix, 0)
-    distance_matrix = np.clip(distance_matrix, 0, 2)
+    n_clusters = min(max_k, max(2, len(texts) // 15))
 
-    clustering = DBSCAN(
-        eps=eps,
-        min_samples=min_samples,
-        metric="precomputed",
-        algorithm="auto",
-    )
-    labels = clustering.fit_predict(distance_matrix)
+    try:
+        km = MiniBatchKMeans(n_clusters=n_clusters, random_state=42, batch_size=1000, n_init=3)
+        labels = km.fit_predict(tfidf_matrix)
+    except Exception:
+        return predictions
+
+    try:
+        if len(set(labels)) > 1 and len(labels) > n_clusters:
+            score = silhouette_score(tfidf_matrix, labels, sample_size=min(5000, len(labels)))
+            if score < 0.05:
+                return predictions
+    except Exception:
+        pass
 
     cluster_texts: dict[int, list[str]] = {}
     for idx, label in enumerate(labels):
-        if label == -1:
-            continue
         if label not in cluster_texts:
             cluster_texts[label] = []
         cluster_texts[label].append(texts[idx])
@@ -118,21 +126,17 @@ def cluster_reviews(
         else:
             cluster_labels[cid] = "Minor Issue"
 
-    for i, p in enumerate(predictions):
-        p["cluster_id"] = -1
-        p["cluster_label"] = ""
-
-    for idx, (orig_idx, pred) in enumerate(clusterable):
-        label = labels[idx]
-        if label != -1:
-            pred["cluster_id"] = int(label)
-            pred["cluster_label"] = cluster_labels.get(label, "Uncategorized")
+    for idx_in_sampled, (orig_idx, pred) in enumerate(sampled):
+        if idx_in_sampled < len(labels):
+            label = labels[idx_in_sampled]
+            if len(cluster_texts.get(label, [])) >= min_cluster_size:
+                pred["cluster_id"] = int(label)
+                pred["cluster_label"] = cluster_labels.get(label, "Uncategorized")
 
     return predictions
 
 
 def get_cluster_summary(predictions: list[dict]) -> list[dict]:
-    """Summarize clusters for display: label, count, sample reviews, dominant sentiment."""
     clusters: dict[int, dict] = {}
 
     for p in predictions:
@@ -163,11 +167,6 @@ def get_cluster_summary(predictions: list[dict]) -> list[dict]:
         total = c["count"]
         neg_pct = round(c["negative"] / max(total, 1) * 100, 1)
         c["negative_pct"] = neg_pct
-        if neg_pct > 60:
-            c["severity"] = "high"
-        elif neg_pct > 30:
-            c["severity"] = "medium"
-        else:
-            c["severity"] = "low"
+        c["severity"] = "high" if neg_pct > 60 else "medium" if neg_pct > 30 else "low"
 
     return result

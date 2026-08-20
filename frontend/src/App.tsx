@@ -20,24 +20,40 @@ interface UploadData {
   useTransformer?: boolean;
 }
 
-function AnalyzingScreen({ analysisId, onComplete }: { analysisId: string; onComplete: () => void }) {
+function AnalyzingScreen({ analysisId, onComplete, onError }: { analysisId: string; onComplete: () => void; onError: (msg: string) => void }) {
   const [step, setStep] = useState("Starting...");
   const [percent, setPercent] = useState(0);
 
   useEffect(() => {
+    let consecutiveErrors = 0;
     const interval = setInterval(async () => {
       try {
         const data = await getProgress(analysisId);
         setStep(data.step);
         setPercent(data.percent);
+        consecutiveErrors = 0;
+        if (data.step && data.step.toLowerCase().startsWith("error")) {
+          clearInterval(interval);
+          onError(data.step);
+        }
+        if (data.status === "error") {
+          clearInterval(interval);
+          onError(data.step || "Analysis failed");
+        }
         if (data.percent >= 100) {
           clearInterval(interval);
           onComplete();
         }
-      } catch { /* ignore */ }
+      } catch {
+        consecutiveErrors++;
+        if (consecutiveErrors > 30) {
+          clearInterval(interval);
+          onError("Lost connection to server");
+        }
+      }
     }, 1500);
     return () => clearInterval(interval);
-  }, [analysisId, onComplete]);
+  }, [analysisId, onComplete, onError]);
 
   const steps = ["Text Cleaning", "TF-IDF Vectorization", "Model Training", "Sentiment Prediction", "Problem Detection", "Generating Recommendations"];
 
@@ -93,6 +109,11 @@ function MainApp() {
     setState("dashboard");
   }, []);
 
+  const handleAnalysisError = useCallback((msg: string) => {
+    setAnalysisError(msg);
+    setState("upload");
+  }, []);
+
   if (loading) {
     return (
       <div className="app">
@@ -128,13 +149,12 @@ function MainApp() {
   }
 
   const handleUploadComplete = async (data: UploadData) => {
-    setState("analyzing");
     setAnalysisError("");
 
-    try {
-      const textCol = data.columns.find((c) => /review|text|comment|feedback|content/i.test(c)) || data.columns[0];
-      const ratingCol = data.columns.find((c) => /rating|score|star|rank/i.test(c)) || "";
+    const textCol = data.columns.find((c) => /review|text|comment|feedback|content/i.test(c)) || data.columns[0];
+    const ratingCol = data.columns.find((c) => /rating|score|star|rank/i.test(c)) || "";
 
+    try {
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -150,8 +170,8 @@ function MainApp() {
       const result = await res.json();
       if (!res.ok) throw new Error(result.error);
 
-      setAnalysisId(result.analysis_id);
-      setState("dashboard");
+      setAnalysisId(data.analysisId);
+      setState("analyzing");
     } catch (err: unknown) {
       setAnalysisError(err instanceof Error ? err.message : "Analysis failed");
       setState("upload");
@@ -194,7 +214,7 @@ function MainApp() {
         )}
 
         {state === "analyzing" && analysisId && (
-          <AnalyzingScreen analysisId={analysisId} onComplete={handleAnalysisProgress} />
+          <AnalyzingScreen analysisId={analysisId} onComplete={handleAnalysisProgress} onError={handleAnalysisError} />
         )}
 
         {state === "dashboard" && analysisId && (
