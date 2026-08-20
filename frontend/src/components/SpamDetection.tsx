@@ -3,6 +3,7 @@ import { getSpamSummary, type SpamData, type SpamSummary, type Prediction } from
 
 interface Props {
   analysisId: string;
+  activeModel?: string;
 }
 
 const SENTIMENT_COLOR: Record<string, string> = {
@@ -43,7 +44,7 @@ function getSpamReasons(review: Prediction): string[] {
   return reasons;
 }
 
-export default function SpamDetection({ analysisId }: Props) {
+export default function SpamDetection({ analysisId, activeModel }: Props) {
   const [data, setData] = useState<SpamData | null>(null);
   const [expanded, setExpanded] = useState<number | null>(null);
   const [showAll, setShowAll] = useState(false);
@@ -51,11 +52,11 @@ export default function SpamDetection({ analysisId }: Props) {
 
   useEffect(() => {
     setLoading(true);
-    getSpamSummary(analysisId)
+    getSpamSummary(analysisId, activeModel)
       .then(setData)
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [analysisId]);
+  }, [analysisId, activeModel]);
 
   if (loading) {
     return (

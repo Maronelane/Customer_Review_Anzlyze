@@ -3,9 +3,10 @@ import { getPredictions, type Prediction, type PredictionResponse } from "../api
 
 interface Props {
   analysisId: string;
+  activeModel?: string;
 }
 
-export default function ReviewTable({ analysisId }: Props) {
+export default function ReviewTable({ analysisId, activeModel }: Props) {
   const [predictions, setPredictions] = useState<Prediction[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
@@ -19,7 +20,7 @@ export default function ReviewTable({ analysisId }: Props) {
     setLoading(true);
     try {
       const data: PredictionResponse = await getPredictions(
-        analysisId, limit, page * limit, filter || undefined, search || undefined
+        analysisId, limit, page * limit, filter || undefined, search || undefined, activeModel
       );
       setPredictions(data.predictions);
       setTotal(data.total);
@@ -32,11 +33,11 @@ export default function ReviewTable({ analysisId }: Props) {
 
   useEffect(() => {
     setPage(0);
-  }, [filter, search]);
+  }, [filter, search, activeModel]);
 
   useEffect(() => {
     fetchPredictions();
-  }, [analysisId, page, filter, search]);
+  }, [analysisId, page, filter, search, activeModel]);
 
   const handleSearch = (val: string) => {
     setSearch(val);

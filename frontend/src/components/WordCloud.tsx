@@ -3,6 +3,7 @@ import { getWordFrequency, type WordFreq } from "../api";
 
 interface Props {
   analysisId: string;
+  activeModel?: string;
 }
 
 const SENTIMENT_COLORS: Record<string, string> = {
@@ -19,18 +20,18 @@ function seededRandom(seed: number) {
   return x - Math.floor(x);
 }
 
-export default function WordCloud({ analysisId }: Props) {
+export default function WordCloud({ analysisId, activeModel }: Props) {
   const [words, setWords] = useState<WordFreq[]>([]);
   const [active, setActive] = useState<string>("all");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     setLoading(true);
-    getWordFrequency(analysisId)
+    getWordFrequency(analysisId, activeModel)
       .then((res) => setWords(res.words?.slice(0, 80) || []))
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [analysisId]);
+  }, [analysisId, activeModel]);
 
   const maxCount = useMemo(() => Math.max(...words.map((w) => w.total), 1), [words]);
 

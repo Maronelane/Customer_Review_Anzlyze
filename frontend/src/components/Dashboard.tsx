@@ -199,7 +199,7 @@ export default function Dashboard({ analysisId, onReset }: Props) {
           <div className="grid-span-full">
             <ErrorBoundary>
               <CollapsibleCard title="Executive Summary" defaultOpen>
-                <SummaryPanel analysisId={analysisId} />
+                <SummaryPanel analysisId={analysisId} activeModel={activeModel} />
               </CollapsibleCard>
             </ErrorBoundary>
           </div>
@@ -222,7 +222,7 @@ export default function Dashboard({ analysisId, onReset }: Props) {
           </ErrorBoundary>
           <ErrorBoundary>
             <CollapsibleCard title="Word Cloud">
-              <WordCloud analysisId={analysisId} />
+              <WordCloud analysisId={analysisId} activeModel={activeModel} />
             </CollapsibleCard>
           </ErrorBoundary>
           <ErrorBoundary>
@@ -230,7 +230,7 @@ export default function Dashboard({ analysisId, onReset }: Props) {
               title="Spam / Fake Detection"
               subtitle={currentModelName}
             >
-              <SpamDetection analysisId={analysisId} />
+              <SpamDetection analysisId={analysisId} activeModel={activeModel} />
             </CollapsibleCard>
           </ErrorBoundary>
           <div className="grid-span-full">
@@ -258,7 +258,7 @@ export default function Dashboard({ analysisId, onReset }: Props) {
           </div>
         </div>
       ) : (
-        <ReviewTable analysisId={analysisId} />
+        <ReviewTable analysisId={analysisId} activeModel={activeModel} />
       )}
 
       {showEmail && (

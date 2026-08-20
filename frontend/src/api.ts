@@ -214,11 +214,15 @@ export function getPredictions(
   limit = 50,
   offset = 0,
   sentiment?: string,
-  search?: string
+  search?: string,
+  model?: string,
 ) {
-  const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+  const params = new URLSearchParams();
+  params.set("limit", String(limit));
+  params.set("offset", String(offset));
   if (sentiment) params.set("sentiment", sentiment);
   if (search) params.set("q", search);
+  if (model) params.set("model", model);
   return apiFetch<PredictionResponse>(`/predictions/${analysisId}?${params}`);
 }
 
@@ -264,16 +268,19 @@ export interface WordFreq {
   neutral: number;
 }
 
-export function getWordFrequency(analysisId: string) {
-  return apiFetch<{ words: WordFreq[] }>(`/word-frequency/${analysisId}`);
+export function getWordFrequency(analysisId: string, model?: string) {
+  const qs = model ? `?model=${model}` : "";
+  return apiFetch<{ words: WordFreq[] }>(`/word-frequency/${analysisId}${qs}`);
 }
 
-export function getAiSummary(analysisId: string) {
-  return apiFetch<{ summary: string }>(`/summary/${analysisId}`);
+export function getAiSummary(analysisId: string, model?: string) {
+  const qs = model ? `?model=${model}` : "";
+  return apiFetch<{ summary: string }>(`/summary/${analysisId}${qs}`);
 }
 
-export function getSpamSummary(analysisId: string) {
-  return apiFetch<SpamData>(`/spam/${analysisId}`);
+export function getSpamSummary(analysisId: string, model?: string) {
+  const qs = model ? `?model=${model}` : "";
+  return apiFetch<SpamData>(`/spam/${analysisId}${qs}`);
 }
 
 export function getClusters(analysisId: string) {

@@ -3,19 +3,20 @@ import { getAiSummary } from "../api";
 
 interface Props {
   analysisId: string;
+  activeModel?: string;
 }
 
-export default function SummaryPanel({ analysisId }: Props) {
+export default function SummaryPanel({ analysisId, activeModel }: Props) {
   const [summary, setSummary] = useState("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     setLoading(true);
-    getAiSummary(analysisId)
+    getAiSummary(analysisId, activeModel)
       .then((res) => setSummary(res.summary))
       .catch(() => setSummary(""))
       .finally(() => setLoading(false));
-  }, [analysisId]);
+  }, [analysisId, activeModel]);
 
   if (loading) {
     return (

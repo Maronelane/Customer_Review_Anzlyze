@@ -467,14 +467,15 @@ def results(analysis_id):
 # ──────────────────────────────────────────────
 @app.route("/api/predictions/<analysis_id>")
 def predictions(analysis_id):
-    """Get paginated predictions with optional sentiment filter and search."""
+    """Get paginated predictions with optional sentiment filter, search, and model."""
     try:
         limit = request.args.get("limit", 50, type=int)
         offset = request.args.get("offset", 0, type=int)
         sentiment = request.args.get("sentiment", None)
         q = request.args.get("q", None)
+        model = request.args.get("model", None)
 
-        data = get_predictions(analysis_id, limit, offset, sentiment, q)
+        data = get_predictions(analysis_id, limit, offset, sentiment, q, model=model)
         return jsonify(data)
     except Exception as e:
         return jsonify({"error": f"Failed to fetch predictions: {str(e)}"}), 500
@@ -576,7 +577,8 @@ def word_frequency(analysis_id):
         if not analysis:
             return jsonify({"error": "Analysis not found"}), 404
 
-        predictions_data = get_predictions(analysis_id, limit=10000)
+        model = request.args.get("model", None)
+        predictions_data = get_predictions(analysis_id, limit=10000, model=model)
         predictions = predictions_data.get("predictions", [])
 
         from nltk.corpus import stopwords
@@ -661,7 +663,22 @@ def ai_summary(analysis_id):
         if not results_data:
             return jsonify({"error": "Results not ready"}), 404
 
-        dist = results_data.get("sentiment_distribution", {})
+        model = request.args.get("model", None)
+        model_runs = results_data.get("model_runs", {})
+        if model and model in model_runs:
+            run = model_runs[model]
+            dist = run.get("sentiment_distribution", results_data.get("sentiment_distribution", {}))
+            problems = run.get("problems", results_data.get("problems", {}))
+            recommendations_data = run.get("recommendations", results_data.get("recommendations", {}))
+            spam_summary = run.get("spam_summary", results_data.get("spam_summary", {}))
+            cluster_summary = run.get("cluster_summary", results_data.get("cluster_summary", []))
+        else:
+            dist = results_data.get("sentiment_distribution", {})
+            problems = results_data.get("problems", {})
+            recommendations_data = results_data.get("recommendations", {})
+            spam_summary = results_data.get("spam_summary", {})
+            cluster_summary = results_data.get("cluster_summary", [])
+
         total = dist.get("total", 0)
         pos = dist.get("positive", 0)
         neg = dist.get("negative", 0)
@@ -670,15 +687,13 @@ def ai_summary(analysis_id):
         neg_pct = round(neg / max(total, 1) * 100, 1)
         neu_pct = round(neu / max(total, 1) * 100, 1)
 
-        problems = results_data.get("problems", {}).get("problems", [])
-        top_complaint_words = results_data.get("problems", {}).get("top_complaint_words", [])
-        recommendations = results_data.get("recommendations", {}).get("recommendations", [])
-        spam_summary = results_data.get("spam_summary", {})
-        cluster_summary = results_data.get("cluster_summary", [])
+        problems_list = problems.get("problems", [])
+        top_complaint_words = problems.get("top_complaint_words", [])
+        recommendations = recommendations_data.get("recommendations", [])
 
-        top_problems = [p["category"].replace("_", " ").title() for p in problems[:3]]
+        top_problems = [p["category"].replace("_", " ").title() for p in problems_list[:3]]
         top_problem_detail = []
-        for p in problems[:3]:
+        for p in problems_list[:3]:
             top_problem_detail.append(
                 f"  - {p['category'].replace('_', ' ').title()}: "
                 f"{p['frequency']} mentions ({p['percentage']}% of negative reviews, severity: {p['severity']})"
@@ -975,13 +990,18 @@ def rerun():
 def spam_summary(analysis_id):
     """Get spam detection summary for an analysis."""
     try:
+        model = request.args.get("model", None)
         results_data = get_results(analysis_id)
         if not results_data:
             return jsonify({"error": "Results not found"}), 404
 
-        spam_summary = results_data.get("spam_summary", {})
+        model_runs = results_data.get("model_runs", {})
+        if model and model in model_runs:
+            spam_summary = model_runs[model].get("spam_summary", {})
+        else:
+            spam_summary = results_data.get("spam_summary", {})
 
-        flagged = get_predictions(analysis_id, limit=10000)
+        flagged = get_predictions(analysis_id, limit=10000, model=model)
         flagged_preds = flagged.get("predictions", []) if isinstance(flagged, dict) else []
 
         flagged_reviews = [p for p in flagged_preds if p.get("is_flagged")]
