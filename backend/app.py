@@ -546,7 +546,7 @@ def word_frequency(analysis_id):
 # ──────────────────────────────────────────────
 @app.route("/api/summary/<analysis_id>")
 def ai_summary(analysis_id):
-    """Generate an executive summary using the transformer model."""
+    """Generate a rich executive summary from analysis results."""
     try:
         analysis = get_analysis(analysis_id)
         if not analysis:
@@ -563,26 +563,95 @@ def ai_summary(analysis_id):
         neu = dist.get("neutral", 0)
         pos_pct = round(pos / max(total, 1) * 100, 1)
         neg_pct = round(neg / max(total, 1) * 100, 1)
+        neu_pct = round(neu / max(total, 1) * 100, 1)
 
         problems = results_data.get("problems", {}).get("problems", [])
-        top_problems = [p["category"] for p in problems[:3]]
+        top_complaint_words = results_data.get("problems", {}).get("top_complaint_words", [])
+        recommendations = results_data.get("recommendations", {}).get("recommendations", [])
+        spam_summary = results_data.get("spam_summary", {})
+        cluster_summary = results_data.get("cluster_summary", [])
+
+        top_problems = [p["category"].replace("_", " ").title() for p in problems[:3]]
+        top_problem_detail = []
+        for p in problems[:3]:
+            top_problem_detail.append(
+                f"  - {p['category'].replace('_', ' ').title()}: "
+                f"{p['frequency']} mentions ({p['percentage']}% of negative reviews, severity: {p['severity']})"
+            )
         top_problems_str = ", ".join(top_problems) if top_problems else "no major issues detected"
 
-        text_to_summarize = (
-            f"Customer review analysis of {total} reviews shows {pos_pct}% positive, "
-            f"{neg_pct}% negative, and {round(neu / max(total, 1) * 100, 1)}% neutral sentiment. "
-            f"Top issues: {top_problems_str}. "
-            f"Overall customer feedback indicates {('strong satisfaction' if pos_pct > 60 else 'mixed feelings' if pos_pct > 40 else 'significant concerns')}."
+        critical_count = sum(1 for r in recommendations if r.get("priority") == "critical")
+        high_count = sum(1 for r in recommendations if r.get("priority") == "high")
+
+        spam_flagged = spam_summary.get("total_flagged", 0)
+        spam_pct = spam_summary.get("flagged_percentage", 0)
+
+        cluster_count = len(cluster_summary)
+        high_clusters = sum(1 for c in cluster_summary if c.get("severity") == "high")
+
+        top_words_str = ", ".join([w["word"] for w in top_complaint_words[:8]]) if top_complaint_words else "none"
+
+        lines = ["Executive Review & Strategic Action Summary", ""]
+
+        lines.append(
+            f"Overview: Analyzed {total.toLocaleString()} customer reviews. "
+            f"Sentiment breakdown: {pos_pct}% positive ({pos}), "
+            f"{neg_pct}% negative ({neg}), {neu_pct}% neutral ({neu})."
         )
 
+        if pos_pct > 60:
+            lines.append(f"Overall customer feedback indicates strong satisfaction ({pos_pct}% positive).")
+        elif pos_pct > 40:
+            lines.append(f"Customer sentiment is mixed — {pos_pct}% positive but {neg_pct}% negative.")
+        else:
+            lines.append(f"Significant concerns: only {pos_pct}% positive sentiment with {neg_pct}% negative.")
+
+        lines.append("")
+        lines.append("Key Findings:")
+        if top_problems:
+            lines.append(f"Top issues identified: {top_problems_str}.")
+            lines.extend(top_problem_detail)
+        else:
+            lines.append("No significant problem categories detected in negative reviews.")
+
+        if critical_count > 0 or high_count > 0:
+            lines.append(
+                f"Priority actions: {critical_count} critical and {high_count} high-priority "
+                f"recommendations require immediate attention."
+            )
+
+        if spam_flagged > 0:
+            lines.append(
+                f"Data quality: {spam_flagged} reviews ({spam_pct}%) flagged as potentially "
+                f"fake or spam. Consider excluding these from official reports."
+            )
+
+        if cluster_count > 0:
+            lines.append(
+                f"Root cause analysis identified {cluster_count} distinct complaint clusters"
+                f"{f', with {high_clusters} high-severity groups' if high_clusters else ''}."
+            )
+
+        if top_complaint_words:
+            lines.append(f"Most frequent complaint terms: {top_words_str}.")
+
+        lines.append("")
+        lines.append("Recommended Next Steps:")
+        if critical_count > 0:
+            lines.append("1. Address critical-priority issues immediately to prevent further negative sentiment.")
+        if high_count > 0:
+            lines.append(f"{'2' if critical_count > 0 else '1'}. Tackle {high_count} high-priority areas within the next sprint.")
+        if spam_pct > 10:
+            step_num = 1 if critical_count + high_count == 0 else (3 if critical_count > 0 and high_count > 0 else 2)
+            lines.append(f"{step_num}. Investigate and filter {spam_flagged} suspicious reviews to improve data accuracy.")
+        if cluster_count > 0:
+            lines.append("Review root cause clusters to understand underlying systemic issues beyond individual complaints.")
+        if not recommendations:
+            lines.append("Continue monitoring reviews over time to track sentiment trends.")
+
+        summary_text = "\n".join(lines)
+
         set_progress(analysis_id, "Generating AI summary", 95)
-        try:
-            from transformers import pipeline as hf_pipeline
-            summarizer = hf_pipeline("summarization", model="facebook/bart-large-cnn", device=-1)
-            summary_result = summarizer(text_to_summarize, max_length=80, min_length=20, do_sample=False)
-            summary_text = summary_result[0]["summary_text"]
-        except Exception:
-            summary_text = text_to_summarize
 
         return jsonify({"summary": summary_text})
     except Exception as e:

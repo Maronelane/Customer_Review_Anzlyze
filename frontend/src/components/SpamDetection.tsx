@@ -1,24 +1,55 @@
 import { useState, useEffect } from "react";
-import { getSpamSummary, type SpamData } from "../api";
+import { getSpamSummary, type SpamData, type Prediction } from "../api";
 
 interface Props {
   analysisId: string;
 }
 
-const SENTIMENT_DOT: Record<string, string> = {
+const SENTIMENT_COLOR: Record<string, string> = {
   positive: "#22c55e",
   negative: "#ef4444",
   neutral: "#f59e0b",
 };
 
+function getSpamReasons(review: Prediction): string[] {
+  const reasons: string[] = [];
+  const text = review.review_text || "";
+  const len = text.trim().length;
+
+  if (len < 10) reasons.push("Too short");
+  else if (len < 25) reasons.push("Very brief");
+
+  const words = text.toLowerCase().split(/\s+/);
+  const uniqueRatio = new Set(words).size / Math.max(words.length, 1);
+  if (uniqueRatio < 0.3 && words.length > 3) reasons.push("Repetitive");
+
+  const capsRatio = (text.match(/[A-Z]/g) || []).length / Math.max(text.length, 1);
+  if (capsRatio > 0.5) reasons.push("Excessive caps");
+
+  if (/[!?]{3,}/.test(text)) reasons.push("Excessive punctuation");
+
+  if (/https?:\/\/|www\.|\.com/i.test(text)) reasons.push("Contains URL");
+
+  const genericPhrases = ["good product", "great product", "love it", "best product",
+    "amazing", "highly recommend", "10/10", "must buy", "terrible", "worst", "do not buy"];
+  const genericCount = genericPhrases.filter(p => text.toLowerCase().includes(p)).length;
+  if (genericCount >= 2) reasons.push("Generic phrases");
+  else if (genericCount === 1 && len < 40) reasons.push("Generic & short");
+
+  const promoWords = ["coupon", "discount", "promo", "free shipping", "act now", "subscribe"];
+  if (promoWords.some(w => text.toLowerCase().includes(w))) reasons.push("Promotional");
+
+  if (reasons.length === 0) reasons.push("Suspicious pattern");
+  return reasons;
+}
+
 export default function SpamDetection({ analysisId }: Props) {
   const [data, setData] = useState<SpamData | null>(null);
+  const [expanded, setExpanded] = useState<number | null>(null);
   const [showAll, setShowAll] = useState(false);
 
   useEffect(() => {
-    getSpamSummary(analysisId)
-      .then(setData)
-      .catch(() => {});
+    getSpamSummary(analysisId).then(setData).catch(() => {});
   }, [analysisId]);
 
   if (!data) return null;
@@ -26,81 +57,134 @@ export default function SpamDetection({ analysisId }: Props) {
   const { spam_summary, flagged_reviews } = data;
   const pct = spam_summary.flagged_percentage;
   const riskLevel = pct > 20 ? "high" : pct > 10 ? "medium" : "low";
-  const displayed = showAll ? flagged_reviews : flagged_reviews.slice(0, 10);
+  const cleanCount = spam_summary.total_reviews - spam_summary.total_flagged;
+  const displayed = showAll ? flagged_reviews : flagged_reviews.slice(0, 8);
+
+  const reasonCounts: Record<string, number> = {};
+  flagged_reviews.forEach((r) => {
+    getSpamReasons(r).forEach((reason) => {
+      reasonCounts[reason] = (reasonCounts[reason] || 0) + 1;
+    });
+  });
+  const topReasons = Object.entries(reasonCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5);
 
   return (
-    <div className="insight-card spam-card">
-      <div className="spam-header">
-        <h3>Fake Review / Spam Detection</h3>
-        <div className={`spam-risk-badge ${riskLevel}`}>
-          {riskLevel.toUpperCase()} RISK
+    <div className="card spam-card">
+      <div className="card-header">
+        <h3>Spam / Fake Review Detection</h3>
+        <div className={`risk-badge ${riskLevel}`}>{riskLevel} risk</div>
+      </div>
+
+      <div className="spam-overview">
+        <div className="spam-donut-wrapper">
+          <svg viewBox="0 0 100 100" className="spam-donut">
+            <circle cx="50" cy="50" r="38" fill="none" stroke="var(--bg-hover)" strokeWidth="12" />
+            <circle
+              cx="50" cy="50" r="38" fill="none"
+              stroke={riskLevel === "high" ? "#ef4444" : riskLevel === "medium" ? "#f59e0b" : "#22c55e"}
+              strokeWidth="12"
+              strokeDasharray={`${(pct / 100) * 238.76} ${238.76}`}
+              strokeDashoffset="0"
+              strokeLinecap="round"
+              transform="rotate(-90 50 50)"
+              className="donut-segment"
+            />
+            <text x="50" y="46" textAnchor="middle" className="donut-total">{pct}%</text>
+            <text x="50" y="60" textAnchor="middle" className="donut-label">spam rate</text>
+          </svg>
+        </div>
+
+        <div className="spam-numbers">
+          <div className="spam-num clean">
+            <span className="spam-num-val">{cleanCount.toLocaleString()}</span>
+            <span className="spam-num-lbl">Clean Reviews</span>
+          </div>
+          <div className="spam-num flagged">
+            <span className="spam-num-val">{spam_summary.total_flagged.toLocaleString()}</span>
+            <span className="spam-num-lbl">Flagged</span>
+          </div>
+          <div className="spam-num total">
+            <span className="spam-num-val">{spam_summary.total_reviews.toLocaleString()}</span>
+            <span className="spam-num-lbl">Total</span>
+          </div>
         </div>
       </div>
 
-      <div className="spam-stats">
-        <div className="spam-stat">
-          <span className="spam-stat-value">{spam_summary.total_flagged}</span>
-          <span className="spam-stat-label">Flagged Reviews</span>
-        </div>
-        <div className="spam-stat">
-          <span className="spam-stat-value">{spam_summary.total_reviews}</span>
-          <span className="spam-stat-label">Total Reviews</span>
-        </div>
-        <div className="spam-stat">
-          <span className="spam-stat-value">{pct}%</span>
-          <span className="spam-stat-label">Spam Rate</span>
-        </div>
-      </div>
-
-      <div className="spam-bar-container">
-        <div className="spam-bar-bg">
-          <div
-            className="spam-bar"
-            style={{ width: `${Math.min(pct, 100)}%` }}
-          />
-        </div>
-      </div>
-
-      {flagged_reviews.length > 0 && (
-        <>
-          <h4 className="spam-flagged-title">
-            Flagged Reviews ({flagged_reviews.length})
-          </h4>
-          <div className="spam-review-list">
-            {displayed.map((review, i) => (
-              <div key={i} className="spam-review-item">
-                <div className="spam-review-header">
-                  <span
-                    className="sentiment-dot"
-                    style={{ backgroundColor: SENTIMENT_DOT[review.sentiment] || "#6b7280" }}
-                  />
-                  <span className="spam-review-sentiment">{review.sentiment}</span>
-                  <span className="spam-score-badge">
-                    Score: {review.spam_score.toFixed(2)}
-                  </span>
-                </div>
-                <p className="spam-review-text">
-                  {review.review_text.slice(0, 200)}
-                  {review.review_text.length > 200 && "..."}
-                </p>
-              </div>
+      {topReasons.length > 0 && (
+        <div className="spam-reasons">
+          <h4>Why Reviews Were Flagged</h4>
+          <div className="reason-tags">
+            {topReasons.map(([reason, count]) => (
+              <span key={reason} className="reason-tag">
+                {reason} <span className="reason-count">{count}</span>
+              </span>
             ))}
           </div>
-          {flagged_reviews.length > 10 && (
-            <button
-              className="spam-show-more"
-              onClick={() => setShowAll(!showAll)}
-            >
-              {showAll ? "Show Less" : `Show All (${flagged_reviews.length})`}
-            </button>
+        </div>
+      )}
+
+      {flagged_reviews.length > 0 && (
+        <div className="spam-flagged-section">
+          <button
+            className="spam-collapse-toggle"
+            onClick={() => setShowAll(!showAll)}
+          >
+            <span>Flagged Reviews ({flagged_reviews.length})</span>
+            <span className={`collapse-icon ${showAll ? "open" : ""}`}>&#9662;</span>
+          </button>
+
+          {showAll && (
+            <div className="spam-review-list">
+              {displayed.map((review, i) => {
+                const isExpanded = expanded === i;
+                const reasons = getSpamReasons(review);
+                return (
+                  <div key={i} className={`spam-review-item ${isExpanded ? "expanded" : ""}`}>
+                    <button
+                      className="spam-review-clickable"
+                      onClick={() => setExpanded(isExpanded ? null : i)}
+                    >
+                      <div className="spam-review-left">
+                        <span
+                          className="sentiment-dot"
+                          style={{ backgroundColor: SENTIMENT_COLOR[review.sentiment] || "#6b7280" }}
+                        />
+                        <span className="spam-review-text-preview">
+                          {review.review_text.slice(0, 100)}
+                          {review.review_text.length > 100 && "..."}
+                        </span>
+                      </div>
+                      <div className="spam-review-right">
+                        <span className="spam-score-pill">{review.spam_score.toFixed(2)}</span>
+                        <span className={`expand-arrow ${isExpanded ? "open" : ""}`}>&#9656;</span>
+                      </div>
+                    </button>
+
+                    {isExpanded && (
+                      <div className="spam-review-detail">
+                        <p className="spam-full-text">{review.review_text}</p>
+                        <div className="spam-review-reasons">
+                          {reasons.map((r) => (
+                            <span key={r} className="reason-tag small">{r}</span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           )}
-        </>
+        </div>
       )}
 
       {flagged_reviews.length === 0 && (
-        <p className="spam-clean-msg">
-          No suspicious reviews detected. All reviews appear genuine.
-        </p>
+        <div className="spam-clean-state">
+          <span className="clean-icon">&#10003;</span>
+          <p>All {spam_summary.total_reviews.toLocaleString()} reviews appear genuine. No suspicious activity detected.</p>
+        </div>
       )}
     </div>
   );

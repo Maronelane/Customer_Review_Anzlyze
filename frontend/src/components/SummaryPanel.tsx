@@ -19,19 +19,48 @@ export default function SummaryPanel({ analysisId }: Props) {
 
   if (loading) {
     return (
-      <div className="insight-card">
+      <div className="card summary-card">
         <h3>Executive Summary</h3>
-        <div className="insight-loading">Generating summary...</div>
+        <div className="summary-loading">
+          <div className="summary-skeleton-line" />
+          <div className="summary-skeleton-line short" />
+          <div className="summary-skeleton-line" />
+        </div>
       </div>
     );
   }
 
   if (!summary) return null;
 
+  const lines = summary.split("\n").filter(Boolean);
+  const title = lines[0] || "";
+  const body = lines.slice(1);
+
   return (
-    <div className="insight-card">
-      <h3>Executive Summary</h3>
-      <p className="summary-text">{summary}</p>
+    <div className="card summary-card">
+      <div className="summary-header">
+        <h3>Executive Summary</h3>
+        <span className="summary-badge">AI-Generated</span>
+      </div>
+      <div className="summary-content">
+        {body.map((line, i) => {
+          const trimmed = line.trim();
+          if (trimmed.startsWith("WARNING:") || trimmed.startsWith("CAUTION:")) {
+            return (
+              <p key={i} className={`summary-alert ${trimmed.startsWith("WARNING") ? "danger" : "warning"}`}>
+                {trimmed}
+              </p>
+            );
+          }
+          if (trimmed.startsWith("Primary Focus:") || trimmed.startsWith("Top problem")) {
+            return <p key={i} className="summary-focus">{trimmed}</p>;
+          }
+          if (trimmed.includes("%")) {
+            return <p key={i} className="summary-metrics">{trimmed}</p>;
+          }
+          return <p key={i} className="summary-body">{trimmed}</p>;
+        })}
+      </div>
     </div>
   );
 }

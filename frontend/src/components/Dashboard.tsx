@@ -60,6 +60,10 @@ export default function Dashboard({ analysisId, onReset }: Props) {
   }
 
   const { results } = data;
+  const dist = results.sentiment_distribution;
+  const posPct = dist.total ? (dist.positive / dist.total) * 100 : 0;
+  const negPct = dist.total ? (dist.negative / dist.total) * 100 : 0;
+  const neuPct = dist.total ? (dist.neutral / dist.total) * 100 : 0;
 
   return (
     <div className="dashboard">
@@ -67,7 +71,7 @@ export default function Dashboard({ analysisId, onReset }: Props) {
         <div className="header-left">
           <h2>Analysis Dashboard</h2>
           <p className="header-meta">
-            {data.analysis.filename} — {data.analysis.total_reviews} reviews analyzed
+            {data.analysis.filename} — {data.analysis.total_reviews.toLocaleString()} reviews analyzed
           </p>
         </div>
         <div className="header-actions">
@@ -82,29 +86,35 @@ export default function Dashboard({ analysisId, onReset }: Props) {
       </div>
 
       <div className="overview-cards">
-        <div className="metric-card">
-          <span className="metric-value">{results.sentiment_distribution.total}</span>
+        <div className="metric-card total">
+          <span className="metric-value">{dist.total.toLocaleString()}</span>
           <span className="metric-label">Total Reviews</span>
         </div>
         <div className="metric-card positive">
-          <span className="metric-value">{results.sentiment_distribution.positive}</span>
+          <span className="metric-value">{dist.positive.toLocaleString()}</span>
           <span className="metric-label">Positive</span>
+          <span className="metric-pct">{posPct.toFixed(1)}%</span>
         </div>
         <div className="metric-card negative">
-          <span className="metric-value">{results.sentiment_distribution.negative}</span>
+          <span className="metric-value">{dist.negative.toLocaleString()}</span>
           <span className="metric-label">Negative</span>
+          <span className="metric-pct">{negPct.toFixed(1)}%</span>
         </div>
         <div className="metric-card neutral">
-          <span className="metric-value">{results.sentiment_distribution.neutral}</span>
+          <span className="metric-value">{dist.neutral.toLocaleString()}</span>
           <span className="metric-label">Neutral</span>
+          <span className="metric-pct">{neuPct.toFixed(1)}%</span>
         </div>
         <div className="metric-card">
-          <span className="metric-value">{results.best_accuracy ? `${(results.best_accuracy * 100).toFixed(1)}%` : "—"}</span>
+          <span className="metric-value">
+            {results.best_accuracy ? `${(results.best_accuracy * 100).toFixed(1)}%` : "—"}
+          </span>
           <span className="metric-label">Model Accuracy</span>
+          <span className="metric-sub">{results.best_model?.replace("_", " ")}</span>
         </div>
         <div className="metric-card">
           <span className="metric-value">{results.problems?.problems?.length ?? 0}</span>
-          <span className="metric-label">Problems Found</span>
+          <span className="metric-label">Issues Detected</span>
         </div>
       </div>
 
@@ -125,9 +135,11 @@ export default function Dashboard({ analysisId, onReset }: Props) {
 
       {activeTab === "overview" ? (
         <div className="dashboard-grid">
-          <SummaryPanel analysisId={analysisId} />
+          <div className="grid-span-full">
+            <SummaryPanel analysisId={analysisId} />
+          </div>
           <SentimentChart
-            distribution={results.sentiment_distribution}
+            distribution={dist}
             bestModel={results.best_model}
             bestAccuracy={results.best_accuracy}
           />
@@ -135,13 +147,13 @@ export default function Dashboard({ analysisId, onReset }: Props) {
           <WordCloud analysisId={analysisId} />
           <SpamDetection analysisId={analysisId} />
           <RootCauseClusters analysisId={analysisId} />
-          <div className="full-width">
+          <div className="grid-span-full">
             <ProblemList
               problems={results.problems?.problems ?? []}
               topWords={results.problems?.top_complaint_words ?? []}
             />
           </div>
-          <div className="full-width">
+          <div className="grid-span-full">
             <Recommendations
               recommendations={results.recommendations?.recommendations ?? []}
               summary={results.recommendations?.summary ?? ""}
