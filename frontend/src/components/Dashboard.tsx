@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { getResults, type ResultsData } from "../api";
 import SentimentChart from "./SentimentChart";
 import ProblemList from "./ProblemList";
@@ -12,6 +12,7 @@ import SummaryPanel from "./SummaryPanel";
 import SpamDetection from "./SpamDetection";
 import ErrorBoundary from "./ErrorBoundary";
 import CollapsibleCard from "./CollapsibleCard";
+import ModelSelector from "./ModelSelector";
 
 interface Props {
   analysisId: string;
@@ -19,28 +20,46 @@ interface Props {
   onCompare?: () => void;
 }
 
+const MODEL_DISPLAY: Record<string, string> = {
+  naive_bayes: "Naive Bayes",
+  logistic_regression: "Logistic Regression",
+  svm: "Support Vector Machine",
+};
+
 export default function Dashboard({ analysisId, onReset }: Props) {
   const [data, setData] = useState<ResultsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState<"overview" | "reviews">("overview");
   const [showEmail, setShowEmail] = useState(false);
+  const [activeModel, setActiveModel] = useState<string>("");
+
+  const fetchResults = useCallback(async (model?: string) => {
+    try {
+      const results = await getResults(analysisId, model);
+      setData(results);
+      if (!activeModel && results.results.active_model) {
+        setActiveModel(results.results.active_model);
+      }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to load results");
+    } finally {
+      setLoading(false);
+    }
+  }, [analysisId, activeModel]);
 
   useEffect(() => {
-    const fetchResults = async () => {
-      try {
-        const results = await getResults(analysisId);
-        setData(results);
-      } catch (err: unknown) {
-        setError(err instanceof Error ? err.message : "Failed to load results");
-      } finally {
-        setLoading(false);
-      }
-    };
+    setLoading(true);
     fetchResults();
-  }, [analysisId]);
+  }, [analysisId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (loading) {
+  const handleModelSelect = useCallback((modelName: string) => {
+    setActiveModel(modelName);
+    setLoading(true);
+    fetchResults(modelName);
+  }, [fetchResults]);
+
+  if (loading && !data) {
     return (
       <div className="dashboard">
         <div className="dashboard-header">
@@ -87,6 +106,18 @@ export default function Dashboard({ analysisId, onReset }: Props) {
   const neuPct = dist.total ? (dist.neutral / dist.total) * 100 : 0;
   const problemCount = results.problems?.problems?.length ?? 0;
 
+  const currentAccuracy = results.model_results?.[activeModel]?.accuracy ?? results.best_accuracy;
+  const currentModelName = MODEL_DISPLAY[activeModel] || activeModel.replace("_", " ");
+
+  const modelEntries = results.model_results
+    ? Object.entries(results.model_results).map(([name, info]) => ({
+        name,
+        displayName: MODEL_DISPLAY[name] || name.replace(/_/g, " "),
+        accuracy: info.accuracy,
+        isBest: name === results.best_model,
+      }))
+    : [];
+
   return (
     <div className="dashboard">
       <div className="dashboard-header">
@@ -106,6 +137,14 @@ export default function Dashboard({ analysisId, onReset }: Props) {
           </button>
         </div>
       </div>
+
+      {modelEntries.length > 0 && (
+        <ModelSelector
+          models={modelEntries}
+          activeModel={activeModel}
+          onSelect={handleModelSelect}
+        />
+      )}
 
       <div className="overview-cards">
         <div className="metric-card total">
@@ -129,10 +168,10 @@ export default function Dashboard({ analysisId, onReset }: Props) {
         </div>
         <div className="metric-card">
           <span className="metric-value">
-            {results.best_accuracy ? `${(results.best_accuracy * 100).toFixed(1)}%` : "—"}
+            {currentAccuracy ? `${(currentAccuracy * 100).toFixed(1)}%` : "—"}
           </span>
           <span className="metric-label">Model Accuracy</span>
-          <span className="metric-sub">{results.best_model?.replace("_", " ")}</span>
+          <span className="metric-sub">{currentModelName}</span>
         </div>
         <div className="metric-card">
           <span className="metric-value">{problemCount}</span>
@@ -167,12 +206,12 @@ export default function Dashboard({ analysisId, onReset }: Props) {
           <ErrorBoundary>
             <CollapsibleCard
               title="Sentiment Distribution"
-              subtitle={`${results.best_model?.replace("_", " ") || "model"} — ${results.best_accuracy ? (results.best_accuracy * 100).toFixed(1) : "—"}%`}
+              subtitle={`${currentModelName} — ${currentAccuracy ? (currentAccuracy * 100).toFixed(1) : "—"}%`}
             >
               <SentimentChart
                 distribution={dist}
-                bestModel={results.best_model}
-                bestAccuracy={results.best_accuracy}
+                bestModel={activeModel}
+                bestAccuracy={currentAccuracy}
               />
             </CollapsibleCard>
           </ErrorBoundary>
@@ -189,7 +228,7 @@ export default function Dashboard({ analysisId, onReset }: Props) {
           <ErrorBoundary>
             <CollapsibleCard
               title="Spam / Fake Detection"
-              subtitle={results.best_model?.replace("_", " ") || undefined}
+              subtitle={currentModelName}
             >
               <SpamDetection analysisId={analysisId} />
             </CollapsibleCard>

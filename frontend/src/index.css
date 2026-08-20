@@ -516,6 +516,40 @@ body {
 .search-input { padding: 7px 12px; border-radius: var(--radius-xs); border: 1px solid var(--border-strong); background: var(--bg); color: var(--text); font-size: 12px; width: 180px; transition: all var(--transition-fast); }
 .search-input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-glow); width: 220px; }
 
+/* Model Selector */
+.model-selector { margin-bottom: 20px; }
+.model-selector-title { font-size: 0.82rem; font-weight: 700; color: var(--text-muted); margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.3px; }
+.model-cards { display: flex; gap: 12px; }
+.model-card {
+  flex: 1; display: flex; align-items: center; gap: 12px; padding: 14px 18px;
+  border-radius: 12px; border: 2px solid var(--border); background: var(--bg-elevated);
+  cursor: pointer; transition: all var(--transition-base); position: relative;
+}
+.model-card:hover {
+  border-color: var(--model-color, var(--primary));
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15), 0 0 0 1px var(--model-color, var(--primary));
+  transform: translateY(-2px);
+}
+.model-card.active {
+  border-color: var(--model-color, var(--primary));
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2), 0 0 0 1px var(--model-color, var(--primary));
+  background: color-mix(in srgb, var(--model-color, var(--primary)) 5%, var(--bg-elevated));
+}
+.model-card-icon {
+  width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center;
+  font-size: 0.85rem; font-weight: 800; color: white;
+  background: var(--model-color, var(--primary)); flex-shrink: 0;
+}
+.model-card-info { display: flex; flex-direction: column; gap: 2px; }
+.model-card-name { font-size: 0.82rem; font-weight: 600; color: var(--text); }
+.model-card-acc { font-size: 0.72rem; color: var(--text-muted); }
+.model-card-best {
+  position: absolute; top: -6px; right: 10px; font-size: 0.6rem; font-weight: 700;
+  padding: 2px 6px; border-radius: 4px; background: var(--positive); color: white;
+  letter-spacing: 0.5px;
+}
+@media (max-width: 600px) { .model-cards { flex-direction: column; } }
+
 /* Compare View */
 .compare-view { padding: 24px 0; }
 .compare-selectors { display: flex; gap: 16px; align-items: flex-end; margin-bottom: 28px; }

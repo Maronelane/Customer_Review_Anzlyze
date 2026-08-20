@@ -343,6 +343,41 @@ def analyze():
                     "flagged_percentage": round(spam_count / max(total, 1) * 100, 1),
                 }
 
+                # Build per-model full results
+                model_runs = {}
+                all_preds = ml_results.get("all_model_predictions", {})
+                all_dists = ml_results.get("all_model_distributions", {})
+                for m_name, m_preds in all_preds.items():
+                    m_dist = all_dists.get(m_name, ml_results["sentiment_distribution"])
+                    detect_spam(m_preds)
+                    detect_duplicates(m_preds)
+                    m_spam_count = sum(1 for p in m_preds if p.get("is_flagged"))
+                    m_total = len(m_preds)
+                    try:
+                        cluster_reviews(m_preds)
+                        m_cluster_summary = get_cluster_summary(m_preds)
+                    except Exception:
+                        m_cluster_summary = []
+                    m_problems = detect_problems(m_preds, ml_results["feature_names"], custom_categories=custom_categories)
+                    m_recommendations = generate_recommendations(
+                        problems=m_problems.get("problems", []),
+                        sentiment_distribution=m_dist,
+                        top_complaint_words=m_problems.get("top_complaint_words", []),
+                        negative_review_sample=m_problems.get("negative_review_sample", []),
+                    )
+                    model_runs[m_name] = {
+                        "sentiment_distribution": m_dist,
+                        "problems": m_problems,
+                        "recommendations": m_recommendations,
+                        "spam_summary": {
+                            "total_flagged": m_spam_count,
+                            "total_reviews": m_total,
+                            "flagged_percentage": round(m_spam_count / max(m_total, 1) * 100, 1),
+                        },
+                        "cluster_summary": m_cluster_summary,
+                        "predictions": m_preds,
+                    }
+
                 save_data = {
                     "best_model": ml_results["best_model"],
                     "best_accuracy": ml_results["best_accuracy"],
@@ -352,9 +387,12 @@ def analyze():
                     "model_results": ml_results["models"],
                     "spam_summary": spam_summary,
                     "cluster_summary": cluster_summary,
+                    "model_runs": {k: {kk: vv for kk, vv in v.items() if kk != "predictions"} for k, v in model_runs.items()},
                 }
                 save_results(analysis_id, save_data)
                 save_predictions(analysis_id, ml_results["predictions"])
+                for m_name, m_data in model_runs.items():
+                    save_predictions(analysis_id, m_data["predictions"], model=m_name)
                 update_analysis_status(analysis_id, "completed", ml_results["sentiment_distribution"]["total"])
 
                 set_progress(analysis_id, "Complete", 100)
@@ -396,7 +434,7 @@ def progress(analysis_id):
 # ──────────────────────────────────────────────
 @app.route("/api/results/<analysis_id>")
 def results(analysis_id):
-    """Get analysis results."""
+    """Get analysis results. Optional ?model= param to switch active model."""
     try:
         analysis = get_analysis(analysis_id)
         if not analysis:
@@ -405,6 +443,16 @@ def results(analysis_id):
         results_data = get_results(analysis_id)
         if not results_data:
             return jsonify({"error": "Results not ready yet"}), 404
+
+        model = request.args.get("model")
+        model_runs = results_data.get("model_runs", {})
+
+        if model and model in model_runs:
+            run = model_runs[model]
+            results_data = {**results_data, **run}
+            results_data["active_model"] = model
+        else:
+            results_data["active_model"] = results_data.get("best_model", "")
 
         return jsonify({
             "analysis": analysis,

@@ -130,11 +130,12 @@ def save_results(analysis_id: str, data: dict):
     db.results.insert_one(doc)
 
 
-def save_predictions(analysis_id: str, predictions: list[dict]):
+def save_predictions(analysis_id: str, predictions: list[dict], model: str = "best"):
     db = get_db()
     docs = [
         {
             "analysis_id": analysis_id,
+            "model": model,
             "review_text": p.get("text", p.get("review_text", ""))[:2000],
             "sentiment": p["sentiment"],
             "spam_score": p.get("spam_score", 0.0),
@@ -162,9 +163,11 @@ def get_results(analysis_id: str):
     return doc
 
 
-def get_predictions(analysis_id: str, limit: int = 100, offset: int = 0, sentiment_filter: str = None, search_query: str = None):
+def get_predictions(analysis_id: str, limit: int = 100, offset: int = 0, sentiment_filter: str = None, search_query: str = None, model: str = None):
     db = get_db()
     query = {"analysis_id": analysis_id}
+    if model:
+        query["model"] = model
     if sentiment_filter:
         query["sentiment"] = sentiment_filter
     if search_query:

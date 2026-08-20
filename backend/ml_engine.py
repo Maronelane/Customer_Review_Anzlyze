@@ -330,18 +330,24 @@ def run_full_pipeline(
     cleaned_texts = df[text_column].apply(clean_text).tolist()
     original_texts = df[text_column].astype(str).tolist()
 
-    # 3. Predict sentiments across the dataset
-    all_predictions = best_model.predict(cleaned_texts).tolist()
+    # 3. Run predictions with ALL models so user can switch between them
+    all_model_predictions = {}
+    all_model_distributions = {}
+    for name, info in results.items():
+        pipeline = info["model"]
+        preds = pipeline.predict(cleaned_texts).tolist()
+        pred_counts = Counter(preds)
+        all_model_predictions[name] = preds
+        all_model_distributions[name] = {
+            "positive": pred_counts.get("positive", 0),
+            "negative": pred_counts.get("negative", 0),
+            "neutral": pred_counts.get("neutral", 0),
+            "total": len(preds),
+        }
 
-    # 4. Calculate sentiment distributions
-    sentiment_counts = Counter(all_predictions)
-    total = len(all_predictions)
-    sentiment_distribution = {
-        "positive": sentiment_counts.get("positive", 0),
-        "negative": sentiment_counts.get("negative", 0),
-        "neutral": sentiment_counts.get("neutral", 0),
-        "total": total,
-    }
+    # Use best model's predictions as the default
+    best_preds = all_model_predictions[best_name]
+    sentiment_distribution = all_model_distributions[best_name]
 
     # 5. Extract feature names from the TF-IDF vectorizer inside the pipeline
     try:
@@ -350,11 +356,19 @@ def run_full_pipeline(
     except Exception:
         feature_names = []
 
-    # 6. Map predictions alongside original texts
+    # 6. Map predictions alongside original texts (best model as default)
     predictions_with_text = [
-        {"text": original_texts[i], "sentiment": all_predictions[i], "cleaned": cleaned_texts[i]}
-        for i in range(len(all_predictions))
+        {"text": original_texts[i], "sentiment": best_preds[i], "cleaned": cleaned_texts[i]}
+        for i in range(len(best_preds))
     ]
+
+    # Build per-model prediction sets
+    all_model_predictions_with_text = {}
+    for name, preds in all_model_predictions.items():
+        all_model_predictions_with_text[name] = [
+            {"text": original_texts[i], "sentiment": preds[i], "cleaned": cleaned_texts[i]}
+            for i in range(len(preds))
+        ]
 
     if progress_cb:
         try:
@@ -385,5 +399,7 @@ def run_full_pipeline(
         "best_accuracy": results[best_name]["accuracy"],
         "sentiment_distribution": sentiment_distribution,
         "predictions": predictions_with_text,
+        "all_model_predictions": all_model_predictions_with_text,
+        "all_model_distributions": all_model_distributions,
         "feature_names": feature_names,
     }

@@ -81,6 +81,7 @@ export interface ResultsData {
   results: {
     best_model: string;
     best_accuracy: number;
+    active_model: string;
     sentiment_distribution: {
       positive: number;
       negative: number;
@@ -98,7 +99,20 @@ export interface ResultsData {
       overall_sentiment: string;
       total_recommendations: number;
     };
-    model_results: Record<string, { accuracy: number; report: unknown }>;
+    model_results: Record<string, { accuracy: number; classification_report: unknown }>;
+    spam_summary?: {
+      total_flagged: number;
+      total_reviews: number;
+      flagged_percentage: number;
+    };
+    cluster_summary?: unknown[];
+    model_runs?: Record<string, {
+      sentiment_distribution: { positive: number; negative: number; neutral: number; total: number };
+      problems: { problems: Problem[]; total_negative: number; top_complaint_words: { word: string; count: number }[] };
+      recommendations: { recommendations: Recommendation[]; summary: string; overall_sentiment: string; total_recommendations: number };
+      spam_summary: { total_flagged: number; total_reviews: number; flagged_percentage: number };
+      cluster_summary: unknown[];
+    }>;
   };
 }
 
@@ -190,8 +204,9 @@ export function runAnalysis(analysisId: string, textColumn: string, ratingColumn
   });
 }
 
-export function getResults(analysisId: string) {
-  return apiFetch<ResultsData>(`/results/${analysisId}`);
+export function getResults(analysisId: string, model?: string) {
+  const qs = model ? `?model=${model}` : "";
+  return apiFetch<ResultsData>(`/results/${analysisId}${qs}`);
 }
 
 export function getPredictions(
