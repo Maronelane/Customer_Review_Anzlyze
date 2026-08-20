@@ -1,161 +1,202 @@
 """
-Business Recommender: Generates actionable business suggestions based on detected problems.
+Business Recommender: Generates data-driven, dynamic business recommendations
+based on actual customer review content, complaint patterns, and sentiment data.
 """
 
-RECOMMENDATION_TEMPLATES = {
-    "build_quality": {
-        "title": "Enhance Product Quality & Durability",
-        "priority": "high",
-        "suggestions": [
-            "Implement stricter quality control checks before shipping.",
-            "Source higher-quality materials from vetted suppliers.",
-            "Offer hassle-free replacements or refunds for defective items.",
-            "Conduct regular product testing and durability assessments.",
-            "Create a quality feedback loop between customers and the product team.",
-        ],
-        "impact": "Product quality is the #1 driver of customer trust and long-term loyalty.",
-    },
-    "performance_and_reliability": {
-        "title": "Improve Performance & Reliability",
-        "priority": "high",
-        "suggestions": [
-            "Optimize software code and resource management to reduce lag and freezing.",
-            "Establish automated stress-testing pipelines prior to deployment.",
-            "Address battery drain and charging issues through hardware/firmware audits.",
-            "Provide clear troubleshooting guides for common error states.",
-        ],
-        "impact": "Reliability and stable performance directly correlate with user satisfaction.",
-    },
-    "usability_and_experience": {
-        "title": "Simplify User Experience",
-        "priority": "medium",
-        "suggestions": [
-            "Conduct UX testing sessions to identify confusing workflows.",
-            "Simplify navigation, onboarding flows, and account management.",
-            "Improve error messages and provide clear guidance for recovery.",
-            "Optimize the mobile experience for on-the-go users.",
-        ],
-        "impact": "A smooth user experience reduces friction and increases conversions.",
-    },
-    "customer_service": {
-        "title": "Upgrade Customer Support",
-        "priority": "high",
-        "suggestions": [
-            "Reduce response times by implementing live chat or chatbot support.",
-            "Train support staff on empathy, product knowledge, and conflict resolution.",
-            "Create a comprehensive FAQ and self-service knowledge base.",
-            "Implement a ticketing system to track and prioritize unresolved issues.",
-        ],
-        "impact": "Great service recovery can turn unhappy customers into brand advocates.",
-    },
-    "shipping_and_packaging": {
-        "title": "Improve Delivery & Shipping Logistics",
-        "priority": "high",
-        "suggestions": [
-            "Partner with more reliable shipping carriers to reduce delivery delays.",
-            "Implement real-time tracking notifications to keep customers informed.",
-            "Offer expedited shipping options for time-sensitive orders.",
-            "Review and optimize warehouse packaging standards to prevent transit damage.",
-        ],
-        "impact": "Fast, reliable delivery directly impacts customer satisfaction and repeat purchases.",
-    },
-    "pricing_and_value": {
-        "title": "Optimize Pricing Strategy",
-        "priority": "medium",
-        "suggestions": [
-            "Conduct competitor pricing analysis to ensure market competitiveness.",
-            "Introduce tiered pricing or bundle offers to improve perceived value.",
-            "Clearly communicate the value proposition and unique features.",
-            "Offer loyalty discounts or seasonal promotions to retain price-sensitive customers.",
-        ],
-        "impact": "Perceived value matters more than absolute price — communicate benefits clearly.",
-    },
-    "product_accuracy": {
-        "title": "Improve Product Accuracy & Descriptions",
-        "priority": "medium",
-        "suggestions": [
-            "Ensure product photos and descriptions accurately represent the item.",
-            "Add detailed sizing charts and comparison guides.",
-            "Implement barcode/QR verification during order fulfillment to stop wrong-item shipments.",
-        ],
-        "impact": "Accurate expectations reduce returns and increase customer trust.",
-    },
-    "functional_issues": {
-        "title": "Address Core Functional Failures",
-        "priority": "high",
-        "suggestions": [
-            "Investigate recurring feature, audio, or component failures.",
-            "Deploy targeted patches or hardware fixes for faulty elements.",
-            "Gather post-purchase feedback to detect component drop-offs early.",
-        ],
-        "impact": "Fixing core bugs stops major negative review spikes.",
-    },
-    "food_taste": {
-        "title": "Improve Food Quality & Taste",
-        "priority": "high",
-        "suggestions": [
-            "Review recipes and ingredient sourcing for consistency.",
-            "Conduct blind taste tests with target customer segments.",
-            "Ensure freshness through better storage and faster turnover.",
-        ],
-        "impact": "Taste is the primary factor in food repurchase decisions.",
-    },
-    "comfort": {
-        "title": "Improve Comfort & Fit",
-        "priority": "medium",
-        "suggestions": [
-            "Expand size ranges and provide detailed fit guides.",
-            "Use customer reviews to refine sizing across products.",
-            "Source hypoallergenic and skin-friendly materials.",
-        ],
-        "impact": "Comfort directly affects whether customers buy again.",
-    }
+import re
+from collections import Counter
+
+
+CATEGORY_LABELS = {
+    "build_quality": "Product Quality & Durability",
+    "performance_and_reliability": "Performance & Reliability",
+    "usability_and_experience": "User Experience & Usability",
+    "customer_service": "Customer Service & Support",
+    "shipping_and_packaging": "Delivery & Packaging",
+    "pricing_and_value": "Pricing & Value for Money",
+    "product_accuracy": "Product Accuracy & Descriptions",
+    "functional_issues": "Core Functionality & Features",
+    "food_taste": "Food Quality & Taste",
+    "comfort": "Comfort & Fit",
+}
+
+CATEGORY_ACTION_VERBS = {
+    "build_quality": "improve build quality and material durability",
+    "performance_and_reliability": "resolve performance and reliability issues",
+    "usability_and_experience": "simplify the user experience",
+    "customer_service": "enhance customer support responsiveness",
+    "shipping_and_packaging": "improve delivery speed and packaging quality",
+    "pricing_and_value": "realign pricing with perceived value",
+    "product_accuracy": "ensure product descriptions match reality",
+    "functional_issues": "fix core feature and functionality failures",
+    "food_taste": "improve food taste and ingredient quality",
+    "comfort": "improve product comfort and sizing accuracy",
 }
 
 
-def generate_recommendations(problems: list[dict], sentiment_distribution: dict):
+def _extract_themes(examples: list[str], top_words: list[dict]) -> list[str]:
+    """Extract key complaint themes from example reviews and top complaint words."""
+    word_set = {w["word"] for w in top_words[:20]}
+    themes = []
+
+    for ex in examples:
+        words = re.findall(r"\b\w+\b", ex.lower())
+        meaningful = [w for w in words if w in word_set and len(w) > 3]
+        themes.extend(meaningful[:3])
+
+    theme_counts = Counter(themes)
+    return [t for t, _ in theme_counts.most_common(5)]
+
+
+def _generate_suggestions(category: str, problem: dict, top_words: list[dict],
+                          sentiment_dist: dict, all_problems: list[dict]) -> list[str]:
+    """Generate dynamic suggestions based on actual complaint data."""
+    freq = problem.get("frequency", 0)
+    pct = problem.get("percentage", 0)
+    severity = problem.get("severity", "medium")
+    examples = problem.get("examples", [])
+    themes = _extract_themes(examples, top_words)
+
+    total = sentiment_dist.get("total", 1)
+    neg_count = sentiment_dist.get("negative", 0)
+    neg_pct = round(neg_count / max(total, 1) * 100, 1)
+    pos_count = sentiment_dist.get("positive", 0)
+    pos_pct = round(pos_count / max(total, 1) * 100, 1)
+
+    other_categories = [p["category"] for p in all_problems if p["category_key"] != category][:3]
+    other_str = ", ".join(other_categories) if other_categories else "none"
+
+    action = CATEGORY_ACTION_VERBS.get(category, f"address {category.replace('_', ' ')} concerns")
+
+    suggestions = []
+
+    if themes:
+        theme_str = ", ".join(themes[:3])
+        suggestions.append(
+            f"Customers specifically mention issues with: {theme_str}. "
+            f"Prioritize fixing these {freq} reported complaints ({pct}% of negative reviews)."
+        )
+    else:
+        suggestions.append(
+            f"Review and address the {freq} customer complaints in this category "
+            f"({pct}% of negative feedback)."
+        )
+
+    if severity == "high":
+        suggestions.append(
+            f"This is a HIGH-severity issue affecting over 30% of dissatisfied customers. "
+            f"Immediate action recommended — {action}."
+        )
+    elif severity == "medium":
+        suggestions.append(
+            f"This issue appears in {pct}% of negative reviews. "
+            f"Schedule a focused review to {action}."
+        )
+    else:
+        suggestions.append(
+            f"Lower-priority concern ({pct}% of negative reviews). "
+            f"Monitor for escalation and {action} when resources allow."
+        )
+
+    if examples:
+        snippet = examples[0][:120].strip()
+        if snippet:
+            suggestions.append(
+                f"Representative complaint: \"{snippet}...\" — "
+                f"use this to understand the root cause."
+            )
+
+    related = [p for p in all_problems
+               if p["category_key"] != category and p.get("severity") in ("high", "medium")]
+    if related:
+        related_names = [p["category"] for p in related[:2]]
+        suggestions.append(
+            f"This issue overlaps with: {', '.join(related_names)}. "
+            f"Consider a unified fix to address multiple pain points at once."
+        )
+
+    return suggestions[:5]
+
+
+def _generate_impact(category: str, problem: dict, sentiment_dist: dict) -> str:
+    """Generate a data-driven impact statement."""
+    freq = problem.get("frequency", 0)
+    pct = problem.get("percentage", 0)
+    severity = problem.get("severity", "medium")
+
+    total = sentiment_dist.get("total", 1)
+    neg_count = sentiment_dist.get("negative", 0)
+    pos_count = sentiment_dist.get("positive", 0)
+    neg_pct = round(neg_count / max(total, 1) * 100, 1)
+
+    if severity == "high":
+        return (
+            f"Critical: {pct}% of unhappy customers report {category.replace('_', ' ')} issues. "
+            f"Resolving this could shift up to {pct}% of negative sentiment toward positive."
+        )
+    elif severity == "medium":
+        recovery_potential = min(pct, round(100 - neg_pct, 1))
+        return (
+            f"{pct}% of negative reviews cite this. "
+            f"Improvements here could recover approximately {recovery_potential}% of at-risk sentiment."
+        )
+    else:
+        return (
+            f"Affects {pct}% of negative reviews ({freq} mentions). "
+            f"Lower urgency but contributes to overall dissatisfaction."
+        )
+
+
+def _generate_title(category: str, problem: dict) -> str:
+    """Generate a specific title based on category and data."""
+    base = CATEGORY_LABELS.get(category, category.replace("_", " ").title())
+    freq = problem.get("frequency", 0)
+    severity = problem.get("severity", "medium")
+
+    if severity == "high":
+        return f"Urgent: Fix {base} ({freq} complaints)"
+    elif severity == "medium":
+        return f"Improve {base} ({freq} mentions)"
+    else:
+        return f"Monitor {base} ({freq} mentions)"
+
+
+def generate_recommendations(problems: list[dict], sentiment_distribution: dict,
+                             top_complaint_words: list[dict] = None,
+                             negative_review_sample: list[str] = None):
+    """Generate dynamic, data-driven business recommendations."""
     total = sentiment_distribution.get("total", 1)
     negative_pct = sentiment_distribution.get("negative", 0) / max(total, 1) * 100
+
+    if top_complaint_words is None:
+        top_complaint_words = []
+    if negative_review_sample is None:
+        negative_review_sample = []
 
     recommendations = []
 
     for problem in problems:
         key = problem.get("category_key")
-        if key in RECOMMENDATION_TEMPLATES:
-            template = RECOMMENDATION_TEMPLATES[key]
-            adjusted_priority = template["priority"]
-            if problem.get("severity") == "high" and negative_pct > 30:
-                adjusted_priority = "critical"
+        adjusted_priority = problem.get("severity", "medium")
+        if problem.get("severity") == "high" and negative_pct > 30:
+            adjusted_priority = "critical"
 
-            recommendations.append({
-                "title": template["title"],
-                "priority": adjusted_priority,
-                "problem_category": problem["category"],
-                "problem_frequency": problem["frequency"],
-                "problem_percentage": problem["percentage"],
-                "suggestions": template["suggestions"],
-                "impact": template["impact"],
-                "examples": problem.get("examples", []),
-            })
-        else:
-            adjusted_priority = problem.get("severity", "medium")
-            if problem.get("severity") == "high" and negative_pct > 30:
-                adjusted_priority = "critical"
+        suggestions = _generate_suggestions(
+            key, problem, top_complaint_words, sentiment_distribution, problems
+        )
+        impact = _generate_impact(key, problem, sentiment_distribution)
+        title = _generate_title(key, problem)
 
-            recommendations.append({
-                "title": f"Address: {problem['category']}",
-                "priority": adjusted_priority,
-                "problem_category": problem["category"],
-                "problem_frequency": problem["frequency"],
-                "problem_percentage": problem["percentage"],
-                "suggestions": [
-                    f"Investigate customer complaints related to '{problem['category']}'.",
-                    f"Review {problem['frequency']} mentions across negative reviews for common themes.",
-                    "Gather more detailed feedback on this issue from affected customers.",
-                ],
-                "impact": f"Addressing '{problem['category']}' concerns can improve overall customer satisfaction.",
-                "examples": problem.get("examples", []),
-            })
+        recommendations.append({
+            "title": title,
+            "priority": adjusted_priority,
+            "problem_category": problem["category"],
+            "problem_frequency": problem["frequency"],
+            "problem_percentage": problem["percentage"],
+            "suggestions": suggestions,
+            "impact": impact,
+            "examples": problem.get("examples", []),
+        })
 
     recommendations.sort(key=lambda x: {"critical": 0, "high": 1, "medium": 2, "low": 3}.get(x["priority"], 4))
     summary = _generate_summary(recommendations, sentiment_distribution, negative_pct)
@@ -169,18 +210,47 @@ def generate_recommendations(problems: list[dict], sentiment_distribution: dict)
 
 
 def _generate_summary(recommendations: list[dict], dist: dict, negative_pct: float) -> str:
+    total = dist.get("total", 1)
+    pos = dist.get("positive", 0)
+    neg = dist.get("negative", 0)
+    neu = dist.get("neutral", 0)
+    pos_pct = round(pos / max(total, 1) * 100, 1)
+    neg_pct = round(neg / max(total, 1) * 100, 1)
+
     lines = ["Executive Review & Strategic Action Summary:", ""]
 
+    lines.append(
+        f"Analyzed {total} customer reviews: {pos_pct}% positive, "
+        f"{neg_pct}% negative, {round(neu / max(total, 1) * 100, 1)}% neutral."
+    )
+
     if negative_pct > 40:
-        lines.append("WARNING: High negative feedback concentration detected. Immediate workflow optimizations recommended.")
+        lines.append(
+            "\nWARNING: High negative feedback concentration. "
+            "Immediate action required on the top issues below."
+        )
     elif negative_pct > 20:
-        lines.append("CAUTION: Notable friction patterns identified. Target primary category templates promptly.")
+        lines.append(
+            "\nCAUTION: Notable negative patterns detected. "
+            "Focus on the high-priority categories to prevent further sentiment decline."
+        )
     else:
-        lines.append("Operational sentiment patterns remain stable. Maintain standardized template practices and monitor edge concerns.")
+        lines.append(
+            "\nOverall sentiment is stable. "
+            "Monitor the flagged areas and continue maintaining current quality standards."
+        )
 
     if recommendations:
         top = recommendations[0]
-        lines.append(f"\nPrimary Focus Template: {top['title']} — addressing structural bottlenecks affecting {top['problem_percentage']}% of monitored negative logs.")
+        lines.append(
+            f"\nPrimary Focus: {top['title']} — "
+            f"affects {top['problem_percentage']}% of negative reviews "
+            f"({top['problem_frequency']} mentions)."
+        )
+
+        if len(recommendations) > 1:
+            cats = [r["problem_category"] for r in recommendations[:3]]
+            lines.append(f"Top problem areas: {', '.join(cats)}.")
 
     return "\n".join(lines)
 

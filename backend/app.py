@@ -259,11 +259,13 @@ def analyze():
             custom_categories=custom_categories,
         )
 
-        set_progress(analysis_id, "Generating hybrid recommendations", 90)
+        set_progress(analysis_id, "Generating data-driven recommendations", 90)
 
         recommendations = generate_recommendations(
             problems=problems.get("problems", []),
-            sentiment_distribution=ml_results["sentiment_distribution"]
+            sentiment_distribution=ml_results["sentiment_distribution"],
+            top_complaint_words=problems.get("top_complaint_words", []),
+            negative_review_sample=problems.get("negative_review_sample", []),
         )
 
         save_data = {
@@ -717,7 +719,9 @@ def rerun():
 
         recommendations = generate_recommendations(
             problems=problems.get("problems", []),
-            sentiment_distribution=ml_results["sentiment_distribution"]
+            sentiment_distribution=ml_results["sentiment_distribution"],
+            top_complaint_words=problems.get("top_complaint_words", []),
+            negative_review_sample=problems.get("negative_review_sample", []),
         )
 
         save_data = {
