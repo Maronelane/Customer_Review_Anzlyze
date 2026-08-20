@@ -9,6 +9,7 @@ interface Props {
   models: ModelInfo[];
   activeModel: string;
   onSelect: (modelName: string) => void;
+  hasModelRuns?: boolean;
 }
 
 const MODEL_ICONS: Record<string, string> = {
@@ -23,17 +24,22 @@ const MODEL_COLORS: Record<string, string> = {
   svm: "#ff6b6b",
 };
 
-export default function ModelSelector({ models, activeModel, onSelect }: Props) {
+export default function ModelSelector({ models, activeModel, onSelect, hasModelRuns }: Props) {
   return (
     <div className="model-selector">
-      <h3 className="model-selector-title">Choose Model</h3>
+      <div className="model-selector-header">
+        <h3 className="model-selector-title">Choose Model</h3>
+        {!hasModelRuns && (
+          <span className="model-selector-hint">Run a new analysis to compare all models</span>
+        )}
+      </div>
       <div className="model-cards">
         {models.map((m) => {
           const isActive = m.name === activeModel;
           return (
             <button
               key={m.name}
-              className={`model-card ${isActive ? "active" : ""}`}
+              className={`model-card ${isActive ? "active" : ""} ${!hasModelRuns && !m.isBest ? "disabled" : ""}`}
               onClick={() => onSelect(m.name)}
               style={{ "--model-color": MODEL_COLORS[m.name] || "var(--primary)" } as React.CSSProperties}
             >

@@ -143,6 +143,7 @@ export default function Dashboard({ analysisId, onReset }: Props) {
           models={modelEntries}
           activeModel={activeModel}
           onSelect={handleModelSelect}
+          hasModelRuns={!!results.model_runs && Object.keys(results.model_runs).length > 0}
         />
       )}
 

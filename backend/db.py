@@ -166,12 +166,23 @@ def get_results(analysis_id: str):
 def get_predictions(analysis_id: str, limit: int = 100, offset: int = 0, sentiment_filter: str = None, search_query: str = None, model: str = None):
     db = get_db()
     query = {"analysis_id": analysis_id}
-    if model:
-        query["model"] = model
     if sentiment_filter:
         query["sentiment"] = sentiment_filter
     if search_query:
         query["review_text"] = {"$regex": search_query, "$options": "i"}
+
+    if model:
+        model_query = {**query, "model": model}
+        total = db.predictions.count_documents(model_query)
+        if total > 0:
+            rows = list(db.predictions.find(model_query, {"_id": 0}).sort("_id", 1).skip(offset).limit(limit))
+            return {"predictions": rows, "total": total}
+        # Fall back to old predictions without model field
+        fallback_query = {**query, "$or": [{"model": {"$exists": False}}, {"model": "best"}]}
+        total = db.predictions.count_documents(fallback_query)
+        rows = list(db.predictions.find(fallback_query, {"_id": 0}).sort("_id", 1).skip(offset).limit(limit))
+        return {"predictions": rows, "total": total}
+
     total = db.predictions.count_documents(query)
     rows = list(db.predictions.find(query, {"_id": 0}).sort("_id", 1).skip(offset).limit(limit))
     return {"predictions": rows, "total": total}
