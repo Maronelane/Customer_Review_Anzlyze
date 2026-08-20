@@ -24,8 +24,8 @@ export default function SentimentChart({ distribution, bestModel, bestAccuracy }
       <div className="card-header">
         <h3>Sentiment Distribution</h3>
         <div className="model-badge">
-          <span className="model-name">{bestModel.replace("_", " ")}</span>
-          <span className="model-acc">{(bestAccuracy * 100).toFixed(1)}% acc</span>
+          <span className="model-name">{bestModel?.replace("_", " ") || "N/A"}</span>
+          <span className="model-acc">{bestAccuracy != null ? `${(bestAccuracy * 100).toFixed(1)}% acc` : "—"}</span>
         </div>
       </div>
 

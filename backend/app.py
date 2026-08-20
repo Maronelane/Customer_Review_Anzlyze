@@ -601,7 +601,7 @@ def ai_summary(analysis_id):
         lines = ["Executive Review & Strategic Action Summary", ""]
 
         lines.append(
-            f"Overview: Analyzed {total.toLocaleString()} customer reviews. "
+            f"Overview: Analyzed {total:,} customer reviews. "
             f"Sentiment breakdown: {pos_pct}% positive ({pos}), "
             f"{neg_pct}% negative ({neg}), {neu_pct}% neutral ({neu})."
         )
@@ -882,7 +882,8 @@ def spam_summary(analysis_id):
             return jsonify({"error": "Results not found"}), 404
 
         spam_summary = results_data.get("spam_summary", {})
-        flagged = list(get_predictions(analysis_id, sentiment_filter=None))
+
+        flagged = get_predictions(analysis_id, limit=10000)
         flagged_preds = flagged.get("predictions", []) if isinstance(flagged, dict) else []
 
         flagged_reviews = [p for p in flagged_preds if p.get("is_flagged")]

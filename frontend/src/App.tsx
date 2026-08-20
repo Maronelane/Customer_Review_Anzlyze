@@ -7,6 +7,7 @@ import Register from "./components/Register";
 import FileUpload from "./components/FileUpload";
 import Dashboard from "./components/Dashboard";
 import CompareView from "./components/CompareView";
+import ErrorBoundary from "./components/ErrorBoundary";
 import { getProgress } from "./api";
 
 type AppState = "upload" | "analyzing" | "dashboard" | "compare";
@@ -218,11 +219,22 @@ function MainApp() {
         )}
 
         {state === "dashboard" && analysisId && (
-          <Dashboard
-            analysisId={analysisId}
-            onReset={handleReset}
-            onCompare={() => setState("compare")}
-          />
+          <ErrorBoundary
+            fallback={
+              <div className="error-screen">
+                <p>Dashboard crashed while rendering results.</p>
+                <button className="btn btn-primary" onClick={handleReset}>
+                  Upload New Dataset
+                </button>
+              </div>
+            }
+          >
+            <Dashboard
+              analysisId={analysisId}
+              onReset={handleReset}
+              onCompare={() => setState("compare")}
+            />
+          </ErrorBoundary>
         )}
 
         {state === "compare" && (

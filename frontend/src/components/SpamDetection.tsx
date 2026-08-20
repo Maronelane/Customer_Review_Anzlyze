@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { getSpamSummary, type SpamData, type Prediction } from "../api";
+import { getSpamSummary, type SpamData, type SpamSummary, type Prediction } from "../api";
 
 interface Props {
   analysisId: string;
@@ -54,14 +54,15 @@ export default function SpamDetection({ analysisId }: Props) {
 
   if (!data) return null;
 
-  const { spam_summary, flagged_reviews } = data;
-  const pct = spam_summary.flagged_percentage;
+  const ss = data.spam_summary as SpamSummary | undefined;
+  const flagged_reviews = data.flagged_reviews || [];
+  const pct = ss?.flagged_percentage ?? 0;
   const riskLevel = pct > 20 ? "high" : pct > 10 ? "medium" : "low";
-  const cleanCount = spam_summary.total_reviews - spam_summary.total_flagged;
+  const cleanCount = (ss?.total_reviews ?? 0) - (ss?.total_flagged ?? 0);
   const displayed = showAll ? flagged_reviews : flagged_reviews.slice(0, 8);
 
   const reasonCounts: Record<string, number> = {};
-  flagged_reviews.forEach((r) => {
+  (flagged_reviews || []).forEach((r) => {
     getSpamReasons(r).forEach((reason) => {
       reasonCounts[reason] = (reasonCounts[reason] || 0) + 1;
     });
@@ -102,11 +103,11 @@ export default function SpamDetection({ analysisId }: Props) {
             <span className="spam-num-lbl">Clean Reviews</span>
           </div>
           <div className="spam-num flagged">
-            <span className="spam-num-val">{spam_summary.total_flagged.toLocaleString()}</span>
+            <span className="spam-num-val">{(ss?.total_flagged ?? 0).toLocaleString()}</span>
             <span className="spam-num-lbl">Flagged</span>
           </div>
           <div className="spam-num total">
-            <span className="spam-num-val">{spam_summary.total_reviews.toLocaleString()}</span>
+            <span className="spam-num-val">{(ss?.total_reviews ?? 0).toLocaleString()}</span>
             <span className="spam-num-lbl">Total</span>
           </div>
         </div>
@@ -183,7 +184,7 @@ export default function SpamDetection({ analysisId }: Props) {
       {flagged_reviews.length === 0 && (
         <div className="spam-clean-state">
           <span className="clean-icon">&#10003;</span>
-          <p>All {spam_summary.total_reviews.toLocaleString()} reviews appear genuine. No suspicious activity detected.</p>
+          <p>All {(ss?.total_reviews ?? 0).toLocaleString()} reviews appear genuine. No suspicious activity detected.</p>
         </div>
       )}
     </div>

@@ -11,6 +11,7 @@ import WordCloud from "./WordCloud";
 import SummaryPanel from "./SummaryPanel";
 import SpamDetection from "./SpamDetection";
 import RootCauseClusters from "./RootCauseClusters";
+import ErrorBoundary from "./ErrorBoundary";
 
 interface Props {
   analysisId: string;
@@ -136,28 +137,44 @@ export default function Dashboard({ analysisId, onReset }: Props) {
       {activeTab === "overview" ? (
         <div className="dashboard-grid">
           <div className="grid-span-full">
-            <SummaryPanel analysisId={analysisId} />
+            <ErrorBoundary>
+              <SummaryPanel analysisId={analysisId} />
+            </ErrorBoundary>
           </div>
-          <SentimentChart
-            distribution={dist}
-            bestModel={results.best_model}
-            bestAccuracy={results.best_accuracy}
-          />
-          <TrendChart analysisId={analysisId} />
-          <WordCloud analysisId={analysisId} />
-          <SpamDetection analysisId={analysisId} />
-          <RootCauseClusters analysisId={analysisId} />
-          <div className="grid-span-full">
-            <ProblemList
-              problems={results.problems?.problems ?? []}
-              topWords={results.problems?.top_complaint_words ?? []}
+          <ErrorBoundary>
+            <SentimentChart
+              distribution={dist}
+              bestModel={results.best_model}
+              bestAccuracy={results.best_accuracy}
             />
+          </ErrorBoundary>
+          <ErrorBoundary>
+            <TrendChart analysisId={analysisId} />
+          </ErrorBoundary>
+          <ErrorBoundary>
+            <WordCloud analysisId={analysisId} />
+          </ErrorBoundary>
+          <ErrorBoundary>
+            <SpamDetection analysisId={analysisId} />
+          </ErrorBoundary>
+          <ErrorBoundary>
+            <RootCauseClusters analysisId={analysisId} />
+          </ErrorBoundary>
+          <div className="grid-span-full">
+            <ErrorBoundary>
+              <ProblemList
+                problems={results.problems?.problems ?? []}
+                topWords={results.problems?.top_complaint_words ?? []}
+              />
+            </ErrorBoundary>
           </div>
           <div className="grid-span-full">
-            <Recommendations
-              recommendations={results.recommendations?.recommendations ?? []}
-              summary={results.recommendations?.summary ?? ""}
-            />
+            <ErrorBoundary>
+              <Recommendations
+                recommendations={results.recommendations?.recommendations ?? []}
+                summary={results.recommendations?.summary ?? ""}
+              />
+            </ErrorBoundary>
           </div>
         </div>
       ) : (
