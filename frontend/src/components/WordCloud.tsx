@@ -51,10 +51,7 @@ export default function WordCloud({ analysisId }: Props) {
 
   const getWordColor = (w: WordFreq): string => {
     if (active !== "all") return SENTIMENT_COLORS[active];
-    const max = Math.max(w.positive, w.negative, w.neutral);
-    if (max === w.negative && w.negative > 0) return SENTIMENT_COLORS.negative;
-    if (max === w.positive && w.positive > 0) return SENTIMENT_COLORS.positive;
-    return SENTIMENT_COLORS.neutral;
+    return "var(--text-secondary)";
   };
 
   if (loading) {

@@ -37,7 +37,6 @@ export default function SummaryPanel({ analysisId }: Props) {
     <>
       <div className="summary-header">
         <h3>Executive Summary</h3>
-        <span className="summary-badge">AI-Generated</span>
       </div>
       <div className="summary-content">
         {body.map((line, i) => {

@@ -101,6 +101,9 @@ export default function ProblemList({ problems, topWords }: Props) {
             <h4>Top Complaint Keywords</h4>
             <span className="top-words-count">{topWords.length} keywords</span>
           </div>
+          <p className="top-words-explanation">
+            These keywords are extracted from <strong>negative reviews only</strong>. Words are counted across both original and cleaned review text, with common stop words removed. Higher counts indicate words that appear most frequently in customer complaints.
+          </p>
           <div className="top-words-list">
             {topWords.slice(0, 20).map((w, idx) => {
               const barWidth = (w.count / maxWordCount) * 100;

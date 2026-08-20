@@ -22,12 +22,34 @@ const PRIORITY_STYLES: Record<string, { bg: string; border: string; label: strin
 };
 
 export default function Recommendations({ recommendations, summary }: Props) {
+  const priorityCounts = recommendations.reduce(
+    (acc, rec) => {
+      acc[rec.priority] = (acc[rec.priority] || 0) + 1;
+      return acc;
+    },
+    {} as Record<string, number>
+  );
+
   return (
     <>
-      <div className="summary-box">
-        <h4>Executive Summary</h4>
-        <pre className="summary-text">{summary}</pre>
-      </div>
+      {recommendations.length > 0 && (
+        <div className="rec-overview">
+          <h4>Priority Overview</h4>
+          <div className="rec-overview-grid">
+            {(["critical", "high", "medium", "low"] as const).map((level) => {
+              const count = priorityCounts[level] || 0;
+              if (count === 0) return null;
+              const style = PRIORITY_STYLES[level];
+              return (
+                <div key={level} className="rec-overview-item" style={{ borderColor: style.border }}>
+                  <span className="rec-overview-count" style={{ color: style.border }}>{count}</span>
+                  <span className="rec-overview-label">{style.label}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {recommendations.length === 0 ? (
         <div className="no-recommendations">
