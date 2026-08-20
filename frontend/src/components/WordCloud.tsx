@@ -39,7 +39,10 @@ export default function WordCloud({ analysisId }: Props) {
     return words
       .filter((w) => {
         const val = w[active as keyof WordFreq];
-        return typeof val === "number" && val > 0;
+        if (typeof val !== "number" || val === 0) return false;
+        const total = (w.positive + w.negative + w.neutral) || 1;
+        const pct = val / total;
+        return pct >= 0.4 && val >= 3;
       })
       .map((w) => {
         const total = (w.positive + w.negative + w.neutral) || 1;
