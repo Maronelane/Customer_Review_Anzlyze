@@ -14,6 +14,29 @@ _client = None
 _db = None
 
 
+def _safe_for_mongo(value):
+    """Convert nested data into MongoDB-safe values."""
+    if isinstance(value, dict):
+        cleaned = {}
+        for key, item in value.items():
+            if key == "model":
+                continue
+            cleaned[str(key)] = _safe_for_mongo(item)
+        return cleaned
+    if isinstance(value, list):
+        return [_safe_for_mongo(item) for item in value]
+    if isinstance(value, tuple):
+        return [_safe_for_mongo(item) for item in value]
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    if hasattr(value, "isoformat"):
+        try:
+            return value.isoformat()
+        except TypeError:
+            pass
+    return str(value)
+
+
 def get_db():
     global _client, _db
     if _db is None:
@@ -97,10 +120,10 @@ def save_results(analysis_id: str, data: dict):
         "analysis_id": analysis_id,
         "best_model": data.get("best_model"),
         "best_accuracy": data.get("best_accuracy"),
-        "sentiment_distribution": data.get("sentiment_distribution"),
-        "problems": data.get("problems"),
-        "recommendations": data.get("recommendations"),
-        "model_results": data.get("model_results"),
+        "sentiment_distribution": _safe_for_mongo(data.get("sentiment_distribution")),
+        "problems": _safe_for_mongo(data.get("problems")),
+        "recommendations": _safe_for_mongo(data.get("recommendations")),
+        "model_results": _safe_for_mongo(data.get("model_results")),
     }
     db.results.insert_one(doc)
 

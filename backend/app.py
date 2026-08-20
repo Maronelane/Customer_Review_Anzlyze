@@ -169,9 +169,17 @@ def upload_dataset():
         preview = df.head(5).fillna("").to_dict(orient="records")
         row_count = len(df)
 
+        # 1. Safely retrieve form parameters first
         text_column = request.form.get("text_column", "")
         rating_column = request.form.get("rating_column", "")
 
+        # 2. Auto-detect rating column if not provided
+        if not rating_column:
+            for col in columns:
+                col_lower = str(col).lower()
+                if any(kw in col_lower for kw in ["rating", "score", "star", "rate", "overall"]):
+                    rating_column = col
+                    break
         user_id = None
         auth_header = request.headers.get("Authorization", "")
         if auth_header.startswith("Bearer "):
@@ -251,10 +259,11 @@ def analyze():
             custom_categories=custom_categories,
         )
 
-        set_progress(analysis_id, "Generating recommendations", 90)
+        set_progress(analysis_id, "Generating hybrid recommendations", 90)
+
         recommendations = generate_recommendations(
-            problems["problems"],
-            ml_results["sentiment_distribution"],
+            problems=problems.get("problems", []),
+            sentiment_distribution=ml_results["sentiment_distribution"]
         )
 
         save_data = {
@@ -342,11 +351,14 @@ def predictions(analysis_id):
 
 
 # ──────────────────────────────────────────────
-# Trend Analysis
+# Trend Analysis (Fully Fixed & Robust)
+# ──────────────────────────────────────────────
+# ──────────────────────────────────────────────
+# Trend Analysis (Monthly Aggregation)
 # ──────────────────────────────────────────────
 @app.route("/api/trend/<analysis_id>")
 def trend_analysis(analysis_id):
-    """Get sentiment distribution over time if dataset has a date column."""
+    """Get sentiment distribution aggregated by month if dataset has a date column."""
     try:
         analysis = get_analysis(analysis_id)
         if not analysis:
@@ -360,43 +372,69 @@ def trend_analysis(analysis_id):
         df = read_file_to_df(filepath, analysis.get("stored_path", ""))
         date_col = None
 
+        # Robust date column detection
         for col in df.columns:
-            dtype = df[col].dtype
-            if dtype == "datetime64[ns]" or dtype == "<M8[ns]":
+            dtype = str(df[col].dtype)
+            if "datetime" in dtype:
                 date_col = col
                 break
-            if dtype == "object" or str(dtype).startswith("int") or str(dtype).startswith("float"):
-                sample = df[col].dropna()
-                if len(sample) < 3:
-                    continue
-                parsed = pd.to_datetime(sample.astype(str), errors="coerce")
-                if parsed.notna().sum() > min(len(sample) * 0.1, 3):
-                    date_col = col
-                    break
+            
+            sample = df[col].dropna()
+            if len(sample) < 3:
+                continue
+            
+            col_lower = str(col).lower()
+            name_hint = any(h in col_lower for h in ["date", "time", "day", "created", "timestamp", "year"])
+            
+            try:
+                parsed = pd.to_datetime(sample.astype(str).head(20), errors="coerce", format="mixed")
+            except TypeError:
+                parsed = pd.to_datetime(sample.astype(str).head(20), errors="coerce")
+                
+            valid_ratio = parsed.notna().sum() / len(sample.head(20))
+            if valid_ratio > 0.4 or (name_hint and valid_ratio > 0.1):
+                date_col = col
+                break
 
         if not date_col:
             return jsonify({"trend": [], "message": "No date column detected"})
 
-        valid_dates = pd.to_datetime(df[date_col], errors="coerce")
+        try:
+            valid_dates = pd.to_datetime(df[date_col], errors="coerce", format="mixed")
+        except TypeError:
+            valid_dates = pd.to_datetime(df[date_col], errors="coerce")
+
         predictions_list = predictions_data.get("predictions", [])
 
         trend: dict[str, dict] = {}
         for i, pred in enumerate(predictions_list):
-            if pd.isna(valid_dates.iloc[i]):
+            if i >= len(valid_dates):
+                break
+            dt_val = valid_dates.iloc[i]
+            if pd.isna(dt_val):
                 continue
-            date_key = valid_dates.iloc[i].strftime("%Y-%m-%d")
+            
+            # Group by Year-Month format (e.g., "2014-05") to smooth out daily spikes
+            date_key = dt_val.strftime("%Y-%m")
+            if date_key.startswith("1970"):
+                continue
+
             if date_key not in trend:
                 trend[date_key] = {"date": date_key, "positive": 0, "negative": 0, "neutral": 0, "total": 0}
+            
             sentiment = pred.get("sentiment", "neutral")
-            trend[date_key][sentiment] += 1
-            trend[date_key]["total"] += 1
+            if sentiment in trend[date_key]:
+                trend[date_key][sentiment] += 1
+                trend[date_key]["total"] += 1
 
         sorted_trend = sorted(trend.values(), key=lambda x: x["date"])
+        
+        if not sorted_trend:
+            return jsonify({"trend": [], "message": "No valid monthly date entries found"})
+            
         return jsonify({"trend": sorted_trend, "message": None})
     except Exception as e:
-        return jsonify({"error": f"Trend analysis failed: {str(e)}"}), 500
-
-
+        return jsonify({"error": f"Monthly trend analysis failed: {str(e)}"}), 500
 # ──────────────────────────────────────────────
 # Word Frequency
 # ──────────────────────────────────────────────
@@ -411,7 +449,6 @@ def word_frequency(analysis_id):
         predictions_data = get_predictions(analysis_id, limit=10000)
         predictions = predictions_data.get("predictions", [])
 
-        from collections import Counter
         from nltk.corpus import stopwords
         stop_words = set(stopwords.words("english"))
 
@@ -425,7 +462,8 @@ def word_frequency(analysis_id):
                     if word not in word_counts:
                         word_counts[word] = {"word": word, "total": 0, "positive": 0, "negative": 0, "neutral": 0}
                     word_counts[word]["total"] += 1
-                    word_counts[word][sentiment] += 1
+                    if sentiment in ["positive", "negative", "neutral"]:
+                        word_counts[word][sentiment] += 1
 
         sorted_words = sorted(word_counts.values(), key=lambda x: x["total"], reverse=True)[:100]
         return jsonify({"words": sorted_words})
@@ -631,7 +669,11 @@ def rerun():
 
         problems = detect_problems(ml_results["predictions"], ml_results["feature_names"],
                                    custom_categories=custom_categories)
-        recommendations = generate_recommendations(problems["problems"], ml_results["sentiment_distribution"])
+
+        recommendations = generate_recommendations(
+            problems=problems.get("problems", []),
+            sentiment_distribution=ml_results["sentiment_distribution"]
+        )
 
         save_data = {
             "best_model": ml_results["best_model"],
