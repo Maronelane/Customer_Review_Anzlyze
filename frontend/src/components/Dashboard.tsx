@@ -12,6 +12,7 @@ import SummaryPanel from "./SummaryPanel";
 import SpamDetection from "./SpamDetection";
 import RootCauseClusters from "./RootCauseClusters";
 import ErrorBoundary from "./ErrorBoundary";
+import CollapsibleCard from "./CollapsibleCard";
 
 interface Props {
   analysisId: string;
@@ -65,6 +66,7 @@ export default function Dashboard({ analysisId, onReset }: Props) {
   const posPct = dist.total ? (dist.positive / dist.total) * 100 : 0;
   const negPct = dist.total ? (dist.negative / dist.total) * 100 : 0;
   const neuPct = dist.total ? (dist.neutral / dist.total) * 100 : 0;
+  const problemCount = results.problems?.problems?.length ?? 0;
 
   return (
     <div className="dashboard">
@@ -114,7 +116,7 @@ export default function Dashboard({ analysisId, onReset }: Props) {
           <span className="metric-sub">{results.best_model?.replace("_", " ")}</span>
         </div>
         <div className="metric-card">
-          <span className="metric-value">{results.problems?.problems?.length ?? 0}</span>
+          <span className="metric-value">{problemCount}</span>
           <span className="metric-label">Issues Detected</span>
         </div>
       </div>
@@ -138,42 +140,67 @@ export default function Dashboard({ analysisId, onReset }: Props) {
         <div className="dashboard-grid">
           <div className="grid-span-full">
             <ErrorBoundary>
-              <SummaryPanel analysisId={analysisId} />
+              <CollapsibleCard title="Executive Summary" defaultOpen>
+                <SummaryPanel analysisId={analysisId} />
+              </CollapsibleCard>
             </ErrorBoundary>
           </div>
           <ErrorBoundary>
-            <SentimentChart
-              distribution={dist}
-              bestModel={results.best_model}
-              bestAccuracy={results.best_accuracy}
-            />
+            <CollapsibleCard
+              title="Sentiment Distribution"
+              subtitle={`${results.best_model?.replace("_", " ") || "model"} — ${results.best_accuracy ? (results.best_accuracy * 100).toFixed(1) : "—"}%`}
+            >
+              <SentimentChart
+                distribution={dist}
+                bestModel={results.best_model}
+                bestAccuracy={results.best_accuracy}
+              />
+            </CollapsibleCard>
           </ErrorBoundary>
           <ErrorBoundary>
-            <TrendChart analysisId={analysisId} />
+            <CollapsibleCard title="Sentiment Trend">
+              <TrendChart analysisId={analysisId} />
+            </CollapsibleCard>
           </ErrorBoundary>
           <ErrorBoundary>
-            <WordCloud analysisId={analysisId} />
+            <CollapsibleCard title="Word Cloud">
+              <WordCloud analysisId={analysisId} />
+            </CollapsibleCard>
           </ErrorBoundary>
           <ErrorBoundary>
-            <SpamDetection analysisId={analysisId} />
+            <CollapsibleCard
+              title="Spam / Fake Detection"
+              badge={results.best_accuracy ? undefined : undefined}
+            >
+              <SpamDetection analysisId={analysisId} />
+            </CollapsibleCard>
           </ErrorBoundary>
           <ErrorBoundary>
-            <RootCauseClusters analysisId={analysisId} />
+            <CollapsibleCard title="Root Cause Clusters">
+              <RootCauseClusters analysisId={analysisId} />
+            </CollapsibleCard>
           </ErrorBoundary>
           <div className="grid-span-full">
             <ErrorBoundary>
-              <ProblemList
-                problems={results.problems?.problems ?? []}
-                topWords={results.problems?.top_complaint_words ?? []}
-              />
+              <CollapsibleCard
+                title="Problem Detection"
+                subtitle={problemCount > 0 ? `${problemCount} issues found` : undefined}
+              >
+                <ProblemList
+                  problems={results.problems?.problems ?? []}
+                  topWords={results.problems?.top_complaint_words ?? []}
+                />
+              </CollapsibleCard>
             </ErrorBoundary>
           </div>
           <div className="grid-span-full">
             <ErrorBoundary>
-              <Recommendations
-                recommendations={results.recommendations?.recommendations ?? []}
-                summary={results.recommendations?.summary ?? ""}
-              />
+              <CollapsibleCard title="Recommendations">
+                <Recommendations
+                  recommendations={results.recommendations?.recommendations ?? []}
+                  summary={results.recommendations?.summary ?? ""}
+                />
+              </CollapsibleCard>
             </ErrorBoundary>
           </div>
         </div>
