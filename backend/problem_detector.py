@@ -110,13 +110,31 @@ def detect_problems(predictions: list[dict], feature_names: list[str], top_n: in
             problem_examples[category] = examples
 
     top_tfidf_words = []
-    if feature_names and len(negative_reviews) > 0:
+    if len(negative_reviews) > 0:
+        from nltk.corpus import stopwords
+        stop_words = set(stopwords.words("english"))
+        stop_words.update({
+            "this", "that", "with", "from", "have", "been", "were", "they",
+            "their", "would", "could", "should", "about", "also", "just",
+            "only", "very", "really", "much", "more", "than", "some", "into",
+            "like", "when", "what", "which", "there", "then", "them", "each",
+            "made", "make", "thing", "things", "one", "two", "get", "got",
+            "back", "even", "still", "after", "before", "being", "over",
+            "such", "through", "good", "well", "first", "last", "long",
+            "great", "little", "own", "other", "old", "right", "big", "high",
+            "small", "large", "next", "early", "young", "important", "few",
+            "public", "bad", "same", "able", "every", "found", "look", "day",
+        })
+        complaint_stop = stop_words - {"not", "no", "never", "don", "didn",
+                                       "won", "wouldn", "couldn", "shouldn", "isn", "aren", "wasn", "weren"}
+
         neg_words = Counter()
         for review in negative_reviews:
+            raw_text = review.get("text", "")
             cleaned_content = review.get("cleaned", "")
-            for word in _clean_for_freq(cleaned_content).split():
-                # Allow standard feature matches OR any compound negation tokens containing underscores
-                if (word in feature_names and len(word) > 3) or "_" in word:
+            combined = _clean_for_freq(cleaned_content + " " + raw_text)
+            for word in combined.split():
+                if "_" in word or (len(word) > 3 and word not in complaint_stop and word.isalpha()):
                     neg_words[word] += 1
         top_tfidf_words = [{"word": w, "count": c} for w, c in neg_words.most_common(top_n)]
 

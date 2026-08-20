@@ -440,7 +440,7 @@ def trend_analysis(analysis_id):
 # ──────────────────────────────────────────────
 @app.route("/api/word-frequency/<analysis_id>")
 def word_frequency(analysis_id):
-    """Get word frequency counts from analyzed reviews."""
+    """Get word frequency counts from analyzed reviews with improved accuracy."""
     try:
         analysis = get_analysis(analysis_id)
         if not analysis:
@@ -450,22 +450,67 @@ def word_frequency(analysis_id):
         predictions = predictions_data.get("predictions", [])
 
         from nltk.corpus import stopwords
+        from ml_engine import clean_text
+        from collections import Counter
+
         stop_words = set(stopwords.words("english"))
+        stop_words.update({
+            "this", "that", "with", "from", "have", "been", "were", "they",
+            "their", "would", "could", "should", "about", "also", "just",
+            "only", "very", "really", "much", "more", "than", "some", "into",
+            "like", "when", "what", "which", "there", "then", "them", "each",
+            "made", "make", "thing", "things", "one", "two", "get", "got",
+            "back", "even", "still", "after", "before", "being", "over",
+            "such", "through", "good", "well", "first", "last", "long",
+            "great", "little", "own", "other", "old", "right", "big", "high",
+            "small", "large", "next", "early", "young", "important", "few",
+            "public", "bad", "same", "able", "every", "found", "look", "day",
+        })
 
         word_counts: dict[str, dict] = {}
+        bigram_counts: dict[str, dict] = {}
+
         for pred in predictions:
             text = str(pred.get("review_text", ""))
             sentiment = pred.get("sentiment", "neutral")
-            cleaned = re.sub(r"[^\w\s]", "", text.lower())
-            for word in cleaned.split():
-                if len(word) > 2 and word not in stop_words and word.isalpha():
-                    if word not in word_counts:
-                        word_counts[word] = {"word": word, "total": 0, "positive": 0, "negative": 0, "neutral": 0}
-                    word_counts[word]["total"] += 1
-                    if sentiment in ["positive", "negative", "neutral"]:
-                        word_counts[word][sentiment] += 1
 
-        sorted_words = sorted(word_counts.values(), key=lambda x: x["total"], reverse=True)[:100]
+            cleaned = re.sub(r"[^\w\s]", "", text.lower().strip())
+            tokens = [
+                w for w in cleaned.split()
+                if len(w) > 2 and w not in stop_words and w.isalpha()
+            ]
+
+            for word in tokens:
+                if word not in word_counts:
+                    word_counts[word] = {"word": word, "total": 0, "positive": 0, "negative": 0, "neutral": 0}
+                word_counts[word]["total"] += 1
+                if sentiment in ["positive", "negative", "neutral"]:
+                    word_counts[word][sentiment] += 1
+
+            for i in range(len(tokens) - 1):
+                bigram = f"{tokens[i]} {tokens[i+1]}"
+                if bigram not in bigram_counts:
+                    bigram_counts[bigram] = {"word": bigram, "total": 0, "positive": 0, "negative": 0, "neutral": 0}
+                bigram_counts[bigram]["total"] += 1
+                if sentiment in ["positive", "negative", "neutral"]:
+                    bigram_counts[bigram][sentiment] += 1
+
+        all_words = list(word_counts.values())
+
+        significant_bigrams = [
+            bg for bg in bigram_counts.values()
+            if bg["total"] >= 3
+        ]
+
+        combined = all_words + significant_bigrams
+        seen = set()
+        unique = []
+        for item in combined:
+            if item["word"] not in seen:
+                seen.add(item["word"])
+                unique.append(item)
+
+        sorted_words = sorted(unique, key=lambda x: x["total"], reverse=True)[:120]
         return jsonify({"words": sorted_words})
     except Exception as e:
         return jsonify({"error": f"Word frequency failed: {str(e)}"}), 500

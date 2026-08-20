@@ -11,8 +11,13 @@ const SENTIMENT_COLORS: Record<string, string> = {
   neutral: "#f59e0b",
 };
 
-const MIN_SIZE = 12;
-const MAX_SIZE = 48;
+const MIN_SIZE = 13;
+const MAX_SIZE = 42;
+
+function seededRandom(seed: number) {
+  const x = Math.sin(seed * 9301 + 49297) * 49297;
+  return x - Math.floor(x);
+}
 
 export default function WordCloud({ analysisId }: Props) {
   const [words, setWords] = useState<WordFreq[]>([]);
@@ -28,14 +33,17 @@ export default function WordCloud({ analysisId }: Props) {
 
   const filtered = useMemo(() => {
     if (active === "all") return words;
-    return words.filter((w) => {
-      const val = w[active as keyof WordFreq];
-      return typeof val === "number" && val > 0;
-    }).map((w) => {
-      const total = (w.positive + w.negative + w.neutral) || 1;
-      const pct = w[active as keyof WordFreq] as number;
-      return { ...w, _relevance: pct / total };
-    }).sort((a, b) => (b._relevance || 0) - (a._relevance || 0));
+    return words
+      .filter((w) => {
+        const val = w[active as keyof WordFreq];
+        return typeof val === "number" && val > 0;
+      })
+      .map((w) => {
+        const total = (w.positive + w.negative + w.neutral) || 1;
+        const pct = w[active as keyof WordFreq] as number;
+        return { ...w, _relevance: pct / total };
+      })
+      .sort((a, b) => (b._relevance || 0) - (a._relevance || 0));
   }, [words, active]);
 
   const getWordColor = (w: WordFreq): string => {
@@ -51,8 +59,11 @@ export default function WordCloud({ analysisId }: Props) {
   const tabs = ["all", "positive", "negative", "neutral"];
 
   return (
-    <div className="insight-card">
-      <h3>Word Cloud</h3>
+    <div className="insight-card wordcloud-card">
+      <div className="wordcloud-header">
+        <h3>Word Cloud</h3>
+        <span className="wordcloud-count">{filtered.length} words</span>
+      </div>
       <div className="wordcloud-tabs">
         {tabs.map((t) => (
           <button
@@ -60,21 +71,32 @@ export default function WordCloud({ analysisId }: Props) {
             className={`wordcloud-tab ${active === t ? "active" : ""}`}
             onClick={() => setActive(t)}
           >
-            {t.charAt(0).toUpperCase() + t.slice(1)}
+            {t === "all" && "All"}
+            {t === "positive" && "Positive"}
+            {t === "negative" && "Negative"}
+            {t === "neutral" && "Neutral"}
           </button>
         ))}
       </div>
       <div className="wordcloud">
-        {filtered.map((w) => {
+        {filtered.map((w, idx) => {
           const ratio = w.total / maxCount;
           const size = MIN_SIZE + ratio * (MAX_SIZE - MIN_SIZE);
           const color = getWordColor(w);
+          const rotation = seededRandom(idx) > 0.7 ? (seededRandom(idx + 50) > 0.5 ? 8 : -8) : 0;
+          const fontWeight = ratio > 0.5 ? 800 : ratio > 0.25 ? 600 : 400;
           return (
             <span
               key={w.word}
               className="wordcloud-word"
-              style={{ fontSize: `${size}px`, color, opacity: 0.3 + ratio * 0.7 }}
-              title={`${w.word} — Total: ${w.total}, Positive: ${w.positive}, Negative: ${w.negative}, Neutral: ${w.neutral}`}
+              style={{
+                fontSize: `${size}px`,
+                color,
+                opacity: 0.35 + ratio * 0.65,
+                fontWeight,
+                transform: `rotate(${rotation}deg)`,
+              }}
+              title={`${w.word}\nTotal: ${w.total}  |  Positive: ${w.positive}  |  Negative: ${w.negative}  |  Neutral: ${w.neutral}`}
             >
               {w.word}
             </span>
