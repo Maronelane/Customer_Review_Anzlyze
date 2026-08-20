@@ -126,6 +126,8 @@ def save_results(analysis_id: str, data: dict):
         "model_results": _safe_for_mongo(data.get("model_results")),
         "spam_summary": _safe_for_mongo(data.get("spam_summary")),
         "cluster_summary": _safe_for_mongo(data.get("cluster_summary")),
+        "model_runs": _safe_for_mongo(data.get("model_runs")),
+        "active_model": data.get("active_model", data.get("best_model", "")),
     }
     db.results.insert_one(doc)
 
