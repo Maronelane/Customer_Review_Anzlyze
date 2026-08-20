@@ -23,6 +23,8 @@ from auth import hash_password, check_password, create_tokens, token_required
 from ml_engine import run_full_pipeline
 from problem_detector import detect_problems
 from recommender import generate_recommendations
+from spam_detector import detect_spam, detect_duplicates
+from clustering import cluster_reviews, get_cluster_summary
 from export_service import generate_excel, generate_pdf
 from email_service import send_report_email
 
@@ -252,6 +254,17 @@ def analyze():
                                        custom_categories=custom_categories,
                                        use_transformer=use_transformer)
 
+        set_progress(analysis_id, "Detecting spam & fake reviews", 65)
+        detect_spam(ml_results["predictions"])
+        detect_duplicates(ml_results["predictions"])
+
+        spam_count = sum(1 for p in ml_results["predictions"] if p.get("is_flagged"))
+        total = len(ml_results["predictions"])
+
+        set_progress(analysis_id, "Clustering root causes", 70)
+        cluster_reviews(ml_results["predictions"])
+        cluster_summary = get_cluster_summary(ml_results["predictions"])
+
         set_progress(analysis_id, "Detecting problems", 75)
         problems = detect_problems(
             ml_results["predictions"],
@@ -268,6 +281,12 @@ def analyze():
             negative_review_sample=problems.get("negative_review_sample", []),
         )
 
+        spam_summary = {
+            "total_flagged": spam_count,
+            "total_reviews": total,
+            "flagged_percentage": round(spam_count / max(total, 1) * 100, 1),
+        }
+
         save_data = {
             "best_model": ml_results["best_model"],
             "best_accuracy": ml_results["best_accuracy"],
@@ -275,6 +294,8 @@ def analyze():
             "problems": problems,
             "recommendations": recommendations,
             "model_results": ml_results["models"],
+            "spam_summary": spam_summary,
+            "cluster_summary": cluster_summary,
         }
         save_results(analysis_id, save_data)
         save_predictions(analysis_id, ml_results["predictions"])
@@ -290,6 +311,8 @@ def analyze():
             "sentiment_distribution": ml_results["sentiment_distribution"],
             "problem_count": problems["problem_count"],
             "total_recommendations": recommendations["total_recommendations"],
+            "spam_count": spam_count,
+            "cluster_count": len(cluster_summary),
         })
 
     except Exception as e:
@@ -714,6 +737,13 @@ def rerun():
                                        custom_categories=custom_categories,
                                        use_transformer=use_transformer)
 
+        detect_spam(ml_results["predictions"])
+        detect_duplicates(ml_results["predictions"])
+        spam_count = sum(1 for p in ml_results["predictions"] if p.get("is_flagged"))
+
+        cluster_reviews(ml_results["predictions"])
+        cluster_summary = get_cluster_summary(ml_results["predictions"])
+
         problems = detect_problems(ml_results["predictions"], ml_results["feature_names"],
                                    custom_categories=custom_categories)
 
@@ -724,6 +754,12 @@ def rerun():
             negative_review_sample=problems.get("negative_review_sample", []),
         )
 
+        spam_summary = {
+            "total_flagged": spam_count,
+            "total_reviews": len(ml_results["predictions"]),
+            "flagged_percentage": round(spam_count / max(len(ml_results["predictions"]), 1) * 100, 1),
+        }
+
         save_data = {
             "best_model": ml_results["best_model"],
             "best_accuracy": ml_results["best_accuracy"],
@@ -731,6 +767,8 @@ def rerun():
             "problems": problems,
             "recommendations": recommendations,
             "model_results": ml_results["models"],
+            "spam_summary": spam_summary,
+            "cluster_summary": cluster_summary,
         }
         save_results(new_id, save_data)
         save_predictions(new_id, ml_results["predictions"])
@@ -745,10 +783,80 @@ def rerun():
             "sentiment_distribution": ml_results["sentiment_distribution"],
             "problem_count": problems["problem_count"],
             "total_recommendations": recommendations["total_recommendations"],
+            "spam_count": spam_count,
+            "cluster_count": len(cluster_summary),
         })
 
     except Exception as e:
         return jsonify({"error": f"Re-run failed: {str(e)}"}), 500
+
+
+# ──────────────────────────────────────────────
+# Spam Detection Endpoint
+# ──────────────────────────────────────────────
+@app.route("/api/spam/<analysis_id>")
+def spam_summary(analysis_id):
+    """Get spam detection summary for an analysis."""
+    try:
+        results_data = get_results(analysis_id)
+        if not results_data:
+            return jsonify({"error": "Results not found"}), 404
+
+        spam_summary = results_data.get("spam_summary", {})
+        flagged = list(get_predictions(analysis_id, sentiment_filter=None))
+        flagged_preds = flagged.get("predictions", []) if isinstance(flagged, dict) else []
+
+        flagged_reviews = [p for p in flagged_preds if p.get("is_flagged")]
+        clean_reviews = [p for p in flagged_preds if not p.get("is_flagged")]
+
+        return jsonify({
+            "spam_summary": spam_summary,
+            "flagged_reviews": flagged_reviews[:50],
+            "clean_count": len(clean_reviews),
+        })
+    except Exception as e:
+        return jsonify({"error": f"Spam summary failed: {str(e)}"}), 500
+
+
+# ──────────────────────────────────────────────
+# Root Cause Clustering Endpoint
+# ──────────────────────────────────────────────
+@app.route("/api/clusters/<analysis_id>")
+def cluster_endpoint(analysis_id):
+    """Get cluster summary and reviews for an analysis."""
+    try:
+        results_data = get_results(analysis_id)
+        if not results_data:
+            return jsonify({"error": "Results not found"}), 404
+
+        cluster_summary = results_data.get("cluster_summary", [])
+
+        return jsonify({
+            "clusters": cluster_summary,
+            "total_clusters": len(cluster_summary),
+        })
+    except Exception as e:
+        return jsonify({"error": f"Cluster endpoint failed: {str(e)}"}), 500
+
+
+@app.route("/api/clusters/<analysis_id>/<int:cluster_id>")
+def cluster_reviews_endpoint(analysis_id, cluster_id):
+    """Get all reviews in a specific cluster."""
+    try:
+        from db import get_db
+        db = get_db()
+        reviews = list(db.predictions.find(
+            {"analysis_id": analysis_id, "cluster_id": cluster_id},
+            {"_id": 0},
+        ).limit(100))
+
+        return jsonify({
+            "cluster_id": cluster_id,
+            "reviews": reviews,
+            "count": len(reviews),
+        })
+    except Exception as e:
+        return jsonify({"error": f"Cluster reviews failed: {str(e)}"}), 500
 
 
 # ──────────────────────────────────────────────

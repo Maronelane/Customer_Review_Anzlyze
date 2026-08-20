@@ -131,7 +131,15 @@ def save_results(analysis_id: str, data: dict):
 def save_predictions(analysis_id: str, predictions: list[dict]):
     db = get_db()
     docs = [
-        {"analysis_id": analysis_id, "review_text": p["text"][:2000], "sentiment": p["sentiment"]}
+        {
+            "analysis_id": analysis_id,
+            "review_text": p.get("text", p.get("review_text", ""))[:2000],
+            "sentiment": p["sentiment"],
+            "spam_score": p.get("spam_score", 0.0),
+            "is_flagged": p.get("is_flagged", False),
+            "cluster_id": p.get("cluster_id", -1),
+            "cluster_label": p.get("cluster_label", ""),
+        }
         for p in predictions
     ]
     if docs:

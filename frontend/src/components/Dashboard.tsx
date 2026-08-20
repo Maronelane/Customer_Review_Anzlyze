@@ -9,6 +9,8 @@ import EmailModal from "./EmailModal";
 import TrendChart from "./TrendChart";
 import WordCloud from "./WordCloud";
 import SummaryPanel from "./SummaryPanel";
+import SpamDetection from "./SpamDetection";
+import RootCauseClusters from "./RootCauseClusters";
 
 interface Props {
   analysisId: string;
@@ -131,6 +133,8 @@ export default function Dashboard({ analysisId, onReset }: Props) {
           />
           <TrendChart analysisId={analysisId} />
           <WordCloud analysisId={analysisId} />
+          <SpamDetection analysisId={analysisId} />
+          <RootCauseClusters analysisId={analysisId} />
           <div className="full-width">
             <ProblemList
               problems={results.problems?.problems ?? []}

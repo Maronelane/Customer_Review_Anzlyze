@@ -107,11 +107,44 @@ export interface Prediction {
   analysis_id: string;
   review_text: string;
   sentiment: string;
+  spam_score: number;
+  is_flagged: boolean;
+  cluster_id: number;
+  cluster_label: string;
 }
 
 export interface PredictionResponse {
   predictions: Prediction[];
   total: number;
+}
+
+export interface SpamSummary {
+  total_flagged: number;
+  total_reviews: number;
+  flagged_percentage: number;
+}
+
+export interface SpamData {
+  spam_summary: SpamSummary;
+  flagged_reviews: Prediction[];
+  clean_count: number;
+}
+
+export interface ClusterSummary {
+  cluster_id: number;
+  label: string;
+  count: number;
+  positive: number;
+  negative: number;
+  neutral: number;
+  negative_pct: number;
+  severity: string;
+  sample_reviews: string[];
+}
+
+export interface ClusterData {
+  clusters: ClusterSummary[];
+  total_clusters: number;
 }
 
 export interface Analysis {
@@ -221,4 +254,18 @@ export function getWordFrequency(analysisId: string) {
 
 export function getAiSummary(analysisId: string) {
   return apiFetch<{ summary: string }>(`/summary/${analysisId}`);
+}
+
+export function getSpamSummary(analysisId: string) {
+  return apiFetch<SpamData>(`/spam/${analysisId}`);
+}
+
+export function getClusters(analysisId: string) {
+  return apiFetch<ClusterData>(`/clusters/${analysisId}`);
+}
+
+export function getClusterReviews(analysisId: string, clusterId: number) {
+  return apiFetch<{ cluster_id: number; reviews: Prediction[]; count: number }>(
+    `/clusters/${analysisId}/${clusterId}`
+  );
 }

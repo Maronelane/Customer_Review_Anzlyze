@@ -1352,3 +1352,382 @@ body {
   text-align: center;
   margin-top: 24px;
 }
+
+/* ── Spam Detection Card ── */
+.spam-card {
+  position: relative;
+}
+
+.spam-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.spam-header h3 {
+  margin-bottom: 0;
+}
+
+.spam-risk-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 10px;
+  letter-spacing: 0.5px;
+}
+
+.spam-risk-badge.low {
+  background: rgba(34, 197, 94, 0.12);
+  color: #22c55e;
+}
+
+.spam-risk-badge.medium {
+  background: rgba(245, 158, 11, 0.12);
+  color: #f59e0b;
+}
+
+.spam-risk-badge.high {
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+}
+
+.spam-stats {
+  display: flex;
+  gap: 20px;
+  margin-bottom: 16px;
+}
+
+.spam-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.spam-stat-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.spam-stat-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.spam-bar-container {
+  margin-bottom: 20px;
+}
+
+.spam-bar-bg {
+  width: 100%;
+  height: 6px;
+  background: var(--bg);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.spam-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #f59e0b, #ef4444);
+  border-radius: 3px;
+  transition: width 0.5s ease;
+}
+
+.spam-flagged-title {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+}
+
+.spam-review-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.spam-review-item {
+  padding: 10px 14px;
+  background: rgba(239, 68, 68, 0.04);
+  border: 1px solid rgba(239, 68, 68, 0.12);
+  border-radius: 8px;
+}
+
+.spam-review-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.sentiment-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.spam-review-sentiment {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: capitalize;
+  color: var(--text-muted);
+}
+
+.spam-score-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 8px;
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  margin-left: auto;
+}
+
+.spam-review-text {
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.spam-show-more {
+  display: block;
+  margin: 12px auto 0;
+  padding: 6px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.spam-show-more:hover {
+  border-color: var(--primary);
+  color: var(--text);
+}
+
+.spam-clean-msg {
+  color: var(--text-muted);
+  font-size: 13px;
+  text-align: center;
+  padding: 12px 0;
+}
+
+/* ── Root Cause Clusters Card ── */
+.cluster-card {
+  position: relative;
+}
+
+.cluster-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.cluster-header h3 {
+  margin-bottom: 0;
+}
+
+.cluster-count-badge {
+  font-size: 12px;
+  color: var(--text-muted);
+  background: var(--bg);
+  padding: 2px 10px;
+  border-radius: 10px;
+}
+
+.cluster-description {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 16px;
+}
+
+.cluster-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.cluster-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s;
+}
+
+.cluster-tile:hover {
+  border-color: var(--primary);
+  background: rgba(139, 92, 246, 0.04);
+}
+
+.cluster-tile.active {
+  border-color: var(--primary);
+  background: rgba(139, 92, 246, 0.06);
+}
+
+.cluster-tile-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.cluster-tile-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.3;
+}
+
+.cluster-severity-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.cluster-tile-stats {
+  display: flex;
+  gap: 12px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.cluster-bar-bg {
+  width: 100%;
+  height: 4px;
+  background: var(--bg);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.cluster-bar {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.4s ease;
+}
+
+.cluster-detail {
+  padding: 20px;
+  background: var(--bg);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+.cluster-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.cluster-detail-header h4 {
+  margin: 0;
+  color: var(--text);
+}
+
+.cluster-detail-meta {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.cluster-samples {
+  margin-bottom: 16px;
+}
+
+.cluster-samples h5,
+.cluster-reviews h5 {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.cluster-sample-text {
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.5;
+  padding: 8px 12px;
+  background: rgba(139, 92, 246, 0.04);
+  border-left: 2px solid var(--primary);
+  border-radius: 0 6px 6px 0;
+  margin: 0 0 6px;
+}
+
+.cluster-loading {
+  color: var(--text-muted);
+  font-size: 13px;
+  animation: pulse 1.5s infinite;
+}
+
+.cluster-reviews {
+  margin-top: 12px;
+}
+
+.cluster-review-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.cluster-review-item:last-child {
+  border-bottom: none;
+}
+
+.cluster-review-item p {
+  font-size: 12px;
+  color: var(--text);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.severity-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.severity-badge.high {
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+}
+
+.severity-badge.medium {
+  background: rgba(245, 158, 11, 0.12);
+  color: #f59e0b;
+}
+
+.severity-badge.low {
+  background: rgba(34, 197, 94, 0.12);
+  color: #22c55e;
+}
+
+/* ── Light theme overrides ── */
+[data-theme="light"] .spam-review-item {
+  background: rgba(239, 68, 68, 0.03);
+  border-color: rgba(239, 68, 68, 0.1);
+}
+
+[data-theme="light"] .cluster-sample-text {
+  background: rgba(139, 92, 246, 0.03);
+}
