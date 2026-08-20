@@ -211,6 +211,10 @@ def clear_progress(analysis_id: str):
 # ── Comparison ──
 
 
+def _pct(val, total):
+    return round(val / max(total, 1) * 100, 1)
+
+
 def get_comparison(id1: str, id2: str):
     r1 = get_results(id1)
     r2 = get_results(id2)
@@ -218,9 +222,89 @@ def get_comparison(id1: str, id2: str):
     a2 = get_analysis(id2)
     if not r1 or not r2:
         return None
+
+    d1 = r1.get("sentiment_distribution", {})
+    d2 = r2.get("sentiment_distribution", {})
+
+    t1 = d1.get("total", 0)
+    t2 = d2.get("total", 0)
+
+    pos1 = _pct(d1.get("positive", 0), t1)
+    neg1 = _pct(d1.get("negative", 0), t1)
+    neu1 = _pct(d1.get("neutral", 0), t1)
+    pos2 = _pct(d2.get("positive", 0), t2)
+    neg2 = _pct(d2.get("negative", 0), t2)
+    neu2 = _pct(d2.get("neutral", 0), t2)
+
+    probs1 = r1.get("problems", {}).get("problems", [])
+    probs2 = r2.get("problems", {}).get("problems", [])
+
+    cats1 = {p.get("category_key") for p in probs1}
+    cats2 = {p.get("category_key") for p in probs2}
+    shared_problems = sorted(cats1 & cats2)
+    only_in_1 = sorted(cats1 - cats2)
+    only_in_2 = sorted(cats2 - cats1)
+
+    words1 = r1.get("problems", {}).get("top_complaint_words", [])
+    words2 = r2.get("problems", {}).get("top_complaint_words", [])
+    word_set1 = {w["word"] for w in words1}
+    word_set2 = {w["word"] for w in words2}
+    shared_words = sorted(word_set1 & word_set2)
+    only_words1 = sorted(word_set1 - word_set2)
+    only_words2 = sorted(word_set2 - word_set1)
+
+    spam1 = r1.get("spam_summary", {})
+    spam2 = r2.get("spam_summary", {})
+
+    acc1 = r1.get("best_accuracy", 0) or 0
+    acc2 = r2.get("best_accuracy", 0) or 0
+
+    summary_deltas = [
+        {"label": "Total Reviews", "value1": t1, "value2": t2, "diff": t2 - t1, "type": "count"},
+        {"label": "Positive %", "value1": pos1, "value2": pos2, "diff": round(pos2 - pos1, 1), "type": "pct",
+         "better": "higher"},
+        {"label": "Negative %", "value1": neg1, "value2": neg2, "diff": round(neg2 - neg1, 1), "type": "pct",
+         "better": "lower"},
+        {"label": "Spam Rate %", "value1": spam1.get("flagged_percentage", 0),
+         "value2": spam2.get("flagged_percentage", 0),
+         "diff": round((spam2.get("flagged_percentage", 0) or 0) - (spam1.get("flagged_percentage", 0) or 0), 1),
+         "type": "pct", "better": "lower"},
+        {"label": "Model Accuracy", "value1": round(acc1 * 100, 1), "value2": round(acc2 * 100, 1),
+         "diff": round((acc2 - acc1) * 100, 1), "type": "pct", "better": "higher"},
+    ]
+
     return {
         "analysis1": a1,
         "analysis2": a2,
         "results1": r1,
         "results2": r2,
+        "deltas": {
+            "sentiment": {
+                "dataset1": {"positive": pos1, "negative": neg1, "neutral": neu1},
+                "dataset2": {"positive": pos2, "negative": neg2, "neutral": neu2},
+            },
+            "problems": {
+                "shared": shared_problems,
+                "only_in_dataset1": only_in_1,
+                "only_in_dataset2": only_in_2,
+            },
+            "complaint_words": {
+                "shared": shared_words,
+                "only_in_dataset1": only_words1,
+                "only_in_dataset2": only_words2,
+            },
+            "spam": {
+                "dataset1_rate": spam1.get("flagged_percentage", 0),
+                "dataset2_rate": spam2.get("flagged_percentage", 0),
+                "dataset1_flagged": spam1.get("total_flagged", 0),
+                "dataset2_flagged": spam2.get("total_flagged", 0),
+            },
+            "models": {
+                "dataset1_name": r1.get("best_model", ""),
+                "dataset1_accuracy": round(acc1 * 100, 1),
+                "dataset2_name": r2.get("best_model", ""),
+                "dataset2_accuracy": round(acc2 * 100, 1),
+            },
+            "summary": summary_deltas,
+        },
     }
