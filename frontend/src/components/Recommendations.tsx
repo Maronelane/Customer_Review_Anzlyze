@@ -23,9 +23,7 @@ const PRIORITY_STYLES: Record<string, { bg: string; border: string; label: strin
 
 export default function Recommendations({ recommendations, summary }: Props) {
   return (
-    <div className="card recommendations-card">
-      <h3>Business Recommendations</h3>
-
+    <>
       <div className="summary-box">
         <h4>Executive Summary</h4>
         <pre className="summary-text">{summary}</pre>
@@ -81,6 +79,6 @@ export default function Recommendations({ recommendations, summary }: Props) {
           })}
         </div>
       )}
-    </div>
+    </>
   );
 }

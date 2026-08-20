@@ -58,17 +58,33 @@ export default function WordCloud({ analysisId }: Props) {
   };
 
   if (loading) {
-    return <div className="wordcloud-loading">Loading word cloud...</div>;
+    return (
+      <div className="wordcloud-loading">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '12px 0' }}>
+          <div className="skeleton skeleton-text short" />
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+            {[...Array(12)].map((_, i) => (
+              <div key={i} className="skeleton skeleton-text" style={{ width: 40 + Math.random() * 80, height: 16 }} />
+            ))}
+          </div>
+        </div>
+      </div>
+    );
   }
 
   if (words.length === 0) {
-    return <p className="wordcloud-empty">No word frequency data available.</p>;
+    return <div className="wordcloud-empty" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="1.5" style={{ opacity: 0.5 }}>
+        <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+      </svg>
+      <p>No word frequency data available.</p>
+    </div>;
   }
 
   const tabs = ["all", "positive", "negative", "neutral"];
 
   return (
-    <div className="insight-card wordcloud-card">
+    <>
       <div className="wordcloud-header">
         <h3>Word Cloud</h3>
         <span className="wordcloud-count">{filtered.length} words</span>
@@ -112,6 +128,6 @@ export default function WordCloud({ analysisId }: Props) {
           );
         })}
       </div>
-    </div>
+    </>
   );
 }

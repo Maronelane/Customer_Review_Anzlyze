@@ -19,13 +19,10 @@ export default function SummaryPanel({ analysisId }: Props) {
 
   if (loading) {
     return (
-      <div className="card summary-card">
-        <h3>Executive Summary</h3>
-        <div className="summary-loading">
-          <div className="summary-skeleton-line" />
-          <div className="summary-skeleton-line short" />
-          <div className="summary-skeleton-line" />
-        </div>
+      <div className="summary-loading">
+        <div className="summary-skeleton-line" />
+        <div className="summary-skeleton-line short" />
+        <div className="summary-skeleton-line" />
       </div>
     );
   }
@@ -37,7 +34,7 @@ export default function SummaryPanel({ analysisId }: Props) {
   const body = lines.slice(1);
 
   return (
-    <div className="card summary-card">
+    <>
       <div className="summary-header">
         <h3>Executive Summary</h3>
         <span className="summary-badge">AI-Generated</span>
@@ -61,6 +58,6 @@ export default function SummaryPanel({ analysisId }: Props) {
           return <p key={i} className="summary-body">{trimmed}</p>;
         })}
       </div>
-    </div>
+    </>
   );
 }

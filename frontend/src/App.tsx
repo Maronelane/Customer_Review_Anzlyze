@@ -60,8 +60,14 @@ function AnalyzingScreen({ analysisId, onComplete, onError }: { analysisId: stri
 
   return (
     <div className="analyzing-screen">
-      <div className="spinner" />
-      <h3>Analyzing your reviews...</h3>
+      <div style={{ marginBottom: 24 }}>
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" strokeWidth="1.5" style={{ filter: 'drop-shadow(0 0 12px rgba(108, 92, 231, 0.4))' }}>
+          <circle cx="12" cy="12" r="10" strokeDasharray="4 4" className="spinner" style={{ animation: 'spin 3s linear infinite' }} />
+          <path d="M12 6v6l4 2" />
+        </svg>
+      </div>
+      <h3 style={{ marginBottom: 8, fontWeight: 600 }}>Analyzing your reviews</h3>
+      <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 24 }}>This may take a moment depending on dataset size</p>
       <div className="progress-bar-container">
         <div className="progress-bar" style={{ width: `${percent}%` }} />
       </div>

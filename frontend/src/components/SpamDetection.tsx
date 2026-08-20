@@ -58,7 +58,18 @@ export default function SpamDetection({ analysisId }: Props) {
   }, [analysisId]);
 
   if (loading) {
-    return <div className="spam-loading">Loading spam analysis...</div>;
+    return (
+      <div className="spam-loading">
+        <div style={{ display: 'flex', gap: 24, alignItems: 'center', padding: '12px 0' }}>
+          <div className="skeleton" style={{ width: 110, height: 110, borderRadius: '50%' }} />
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div className="skeleton skeleton-text short" />
+            <div className="skeleton skeleton-text medium" />
+            <div className="skeleton skeleton-text short" />
+          </div>
+        </div>
+      </div>
+    );
   }
 
   if (!data) return <p className="spam-empty">Spam data unavailable.</p>;

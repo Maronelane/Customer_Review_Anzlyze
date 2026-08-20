@@ -36,9 +36,7 @@ export default function ProblemList({ problems, topWords }: Props) {
   const maxWordCount = Math.max(...topWords.map((w) => w.count), 1);
 
   return (
-    <div className="card problem-card">
-      <h3>Detected Problems</h3>
-
+    <>
       {problems.length === 0 ? (
         <div className="no-problems">
           <p>No significant problems detected. Reviews are mostly positive!</p>
@@ -123,6 +121,6 @@ export default function ProblemList({ problems, topWords }: Props) {
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }

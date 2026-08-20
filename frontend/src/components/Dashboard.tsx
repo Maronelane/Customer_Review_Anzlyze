@@ -42,9 +42,26 @@ export default function Dashboard({ analysisId, onReset }: Props) {
 
   if (loading) {
     return (
-      <div className="loading-screen">
-        <div className="spinner" />
-        <p>Loading analysis results...</p>
+      <div className="dashboard">
+        <div className="dashboard-header">
+          <div>
+            <div className="skeleton skeleton-text" style={{ width: 200, height: 24, marginBottom: 8 }} />
+            <div className="skeleton skeleton-text" style={{ width: 300, height: 14 }} />
+          </div>
+        </div>
+        <div className="overview-cards">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="metric-card">
+              <div className="skeleton skeleton-text" style={{ width: 60, height: 24 }} />
+              <div className="skeleton skeleton-text short" style={{ height: 10, marginTop: 8 }} />
+            </div>
+          ))}
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="skeleton" style={{ height: 60, borderRadius: 'var(--radius)' }} />
+          ))}
+        </div>
       </div>
     );
   }
@@ -52,7 +69,10 @@ export default function Dashboard({ analysisId, onReset }: Props) {
   if (error || !data) {
     return (
       <div className="error-screen">
-        <p>{error || "No results found"}</p>
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--negative)" strokeWidth="1.5" style={{ marginBottom: 16, opacity: 0.8 }}>
+          <circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" />
+        </svg>
+        <p style={{ marginBottom: 20, color: 'var(--text-secondary)' }}>{error || "No results found"}</p>
         <button className="btn btn-primary" onClick={onReset}>
           Upload New Dataset
         </button>

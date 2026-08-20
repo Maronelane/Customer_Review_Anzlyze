@@ -25,15 +25,33 @@ export default function TrendChart({ analysisId }: Props) {
   }, [analysisId]);
 
   if (data === null && !message) {
-    return <div className="trend-loading">Loading trend data...</div>;
+    return (
+      <div className="trend-loading">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '12px 0' }}>
+          <div className="skeleton skeleton-text wide" />
+          <div className="skeleton skeleton-text wide" style={{ height: 180 }} />
+          <div className="skeleton skeleton-text medium" />
+        </div>
+      </div>
+    );
   }
 
   if (message) {
-    return <p className="trend-empty">{message}</p>;
+    return <div className="trend-empty" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="1.5" style={{ opacity: 0.5 }}>
+        <path d="M3 3v18h18" /><path d="M7 16l4-4 4 4 6-6" />
+      </svg>
+      <p>{message}</p>
+    </div>;
   }
 
   if (data && data.length === 0) {
-    return <p className="trend-empty">No date column found for trend analysis.</p>;
+    return <div className="trend-empty" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="1.5" style={{ opacity: 0.5 }}>
+        <path d="M3 3v18h18" /><path d="M7 16l4-4 4 4 6-6" />
+      </svg>
+      <p>No date column found for trend analysis.</p>
+    </div>;
   }
 
   return (
