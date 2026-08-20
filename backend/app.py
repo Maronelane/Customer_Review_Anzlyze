@@ -59,12 +59,18 @@ def allowed_file(filename):
 def read_file_to_df(filepath: str, filename: str) -> pd.DataFrame:
     ext = filename.rsplit(".", 1)[1].lower()
     if ext == "csv":
-        return pd.read_csv(filepath)
+        df = pd.read_csv(filepath)
     elif ext in ("xlsx", "xls"):
-        return pd.read_excel(filepath)
+        df = pd.read_excel(filepath)
     elif ext == "json":
-        return _read_json(filepath)
-    return pd.read_csv(filepath)
+        df = _read_json(filepath)
+    else:
+        df = pd.read_csv(filepath)
+
+    for col in df.columns:
+        if df[col].dtype == float or df[col].dtype == object:
+            df[col] = df[col].apply(lambda x: "" if pd.isna(x) else str(x))
+    return df
 
 
 def _read_json(filepath: str) -> pd.DataFrame:
