@@ -117,9 +117,11 @@ export default function SpamDetection({ analysisId, activeModel }: Props) {
       <div className="spam-score-legend">
         <h4>How scores work</h4>
         <p>
-          Each review gets a <strong>spam confidence</strong> (0–100%) from a weighted check of
-          signals: URL/contact info, generic template wording, repetition, excessive caps/punctuation,
-          promotional language, and very brief emotive reviews.
+          A review is only flagged for a clear, objective reason — most commonly because
+          its text is <strong>duplicated many times across the dataset</strong> (a classic
+          fake-review / bot pattern), or because it contains <strong>promotional content</strong>
+          such as links, contact details, or "buy now" language. A short or generic review on its
+          own ("good", "bad product") is <strong>not</strong> flagged.
         </p>
         <div className="spam-legend-scales">
           <span className="legend-scale low">0–54% · Genuine</span>
