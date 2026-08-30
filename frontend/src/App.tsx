@@ -1,14 +1,14 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { BrowserRouter } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { ThemeProvider, useTheme } from "./context/ThemeContext";
-import Login from "./components/Login";
-import Register from "./components/Register";
 import FileUpload from "./components/FileUpload";
+import LandingPage from "./components/LandingPage";
 import Dashboard from "./components/Dashboard";
+import AnalyzingScreen from "./components/AnalyzingScreen";
 import CompareView from "./components/CompareView";
 import ErrorBoundary from "./components/ErrorBoundary";
-import { getProgress } from "./api";
+import Logo from "./components/Logo";
 
 type AppState = "upload" | "analyzing" | "dashboard" | "compare";
 
@@ -17,71 +17,9 @@ interface UploadData {
   columns: string[];
   rowCount: number;
   filename: string;
+  textColumn: string;
+  ratingColumn: string;
   customCategories?: Record<string, string[]>;
-  useTransformer?: boolean;
-}
-
-function AnalyzingScreen({ analysisId, onComplete, onError }: { analysisId: string; onComplete: () => void; onError: (msg: string) => void }) {
-  const [step, setStep] = useState("Starting...");
-  const [percent, setPercent] = useState(0);
-
-  useEffect(() => {
-    let consecutiveErrors = 0;
-    const interval = setInterval(async () => {
-      try {
-        const data = await getProgress(analysisId);
-        setStep(data.step);
-        setPercent(data.percent);
-        consecutiveErrors = 0;
-        if (data.step && data.step.toLowerCase().startsWith("error")) {
-          clearInterval(interval);
-          onError(data.step);
-        }
-        if (data.status === "error") {
-          clearInterval(interval);
-          onError(data.step || "Analysis failed");
-        }
-        if (data.percent >= 100) {
-          clearInterval(interval);
-          onComplete();
-        }
-      } catch {
-        consecutiveErrors++;
-        if (consecutiveErrors > 30) {
-          clearInterval(interval);
-          onError("Lost connection to server");
-        }
-      }
-    }, 1500);
-    return () => clearInterval(interval);
-  }, [analysisId, onComplete, onError]);
-
-  const steps = ["Text Cleaning", "TF-IDF Vectorization", "Model Training", "Sentiment Prediction", "Problem Detection", "Generating Recommendations"];
-
-  return (
-    <div className="analyzing-screen">
-      <div style={{ marginBottom: 24 }}>
-        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" strokeWidth="1.5" style={{ filter: 'drop-shadow(0 0 12px rgba(108, 92, 231, 0.4))' }}>
-          <circle cx="12" cy="12" r="10" strokeDasharray="4 4" className="spinner" style={{ animation: 'spin 3s linear infinite' }} />
-          <path d="M12 6v6l4 2" />
-        </svg>
-      </div>
-      <h3 style={{ marginBottom: 8, fontWeight: 600 }}>Analyzing your reviews</h3>
-      <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 24 }}>This may take a moment depending on dataset size</p>
-      <div className="progress-bar-container">
-        <div className="progress-bar" style={{ width: `${percent}%` }} />
-      </div>
-      <p className="progress-step">{step} ({percent}%)</p>
-      <div className="pipeline-steps">
-        {steps.map((s, i) => {
-          const stepPct = ((i + 1) / steps.length) * 100;
-          return (
-            <div key={s} className={`step ${percent >= stepPct ? "active" : ""}`}>{s}</div>
-          );
-        })}
-      </div>
-    </div>
-  );
 }
 
 function ThemeToggle() {
@@ -136,20 +74,19 @@ function MainApp() {
     return (
       <div className="auth-page">
         <header className="app-header">
-          <div className="logo">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-            </svg>
-            <h1>AnZlyze</h1>
+          <Logo />
+          <div className="header-right">
+            <ThemeToggle />
+            <button
+              className={`btn btn-primary btn-sm ${authView === "register" ? "" : "btn-outline-sm"}`}
+              onClick={() => setAuthView(authView === "login" ? "register" : "login")}
+            >
+              {authView === "login" ? "Sign Up" : "Sign In"}
+            </button>
           </div>
-          <ThemeToggle />
         </header>
-        <main className="app-main">
-          {authView === "login" ? (
-            <Login onSwitch={() => setAuthView("register")} />
-          ) : (
-            <Register onSwitch={() => setAuthView("login")} />
-          )}
+        <main className="app-main landing-main-wrap">
+          <LandingPage authView={authView} onSwitch={setAuthView} />
         </main>
       </div>
     );
@@ -158,8 +95,14 @@ function MainApp() {
   const handleUploadComplete = async (data: UploadData) => {
     setAnalysisError("");
 
-    const textCol = data.columns.find((c) => /review|text|comment|feedback|content/i.test(c)) || data.columns[0];
-    const ratingCol = data.columns.find((c) => /rating|score|star|rank/i.test(c)) || "";
+    const textCol =
+      data.textColumn ||
+      data.columns.find((c) => /review|text|comment|feedback|content/i.test(c)) ||
+      data.columns[0];
+    const ratingCol =
+      data.ratingColumn ||
+      data.columns.find((c) => /rating|score|star|rank/i.test(c)) ||
+      "";
 
     try {
       const res = await fetch("/api/analyze", {
@@ -170,7 +113,6 @@ function MainApp() {
           text_column: textCol,
           rating_column: ratingCol,
           custom_categories: data.customCategories || null,
-          use_transformer: data.useTransformer || false,
         }),
       });
 
@@ -194,14 +136,12 @@ function MainApp() {
   return (
     <div className="app">
       <header className="app-header">
-        <div className="logo">
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-          </svg>
-          <h1>AnZlyze</h1>
-        </div>
+        <Logo />
         <div className="header-right">
-          <span className="username">{user.username}</span>
+          <div className="user-chip" title={user.username}>
+            <span className="avatar">{user.username.charAt(0).toUpperCase()}</span>
+            <span className="username">{user.username}</span>
+          </div>
           <ThemeToggle />
           <button className="btn btn-secondary btn-sm" onClick={logout}>Logout</button>
         </div>

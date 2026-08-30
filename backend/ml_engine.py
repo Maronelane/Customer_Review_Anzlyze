@@ -4,8 +4,6 @@ Fixes data leakage via Scikit-Learn Pipelines, enhances text cleaning
 with robust multi-word negation handling, and ensures correct polarity mapping.
 """
 
-import os
-import pickle
 import re
 import string
 import logging
@@ -22,7 +20,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.pipeline import Pipeline
 from collections import Counter
 from sklearn.model_selection import StratifiedKFold, train_test_split, cross_val_score
-from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
+from sklearn.metrics import classification_report, accuracy_score
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.linear_model import LogisticRegression
 from sklearn.svm import LinearSVC
@@ -257,49 +255,12 @@ def train_models(df: pd.DataFrame, text_column: str, rating_column: Optional[str
     return best_model, results, best_model_name
 
 
-def save_model(model: Any, filepath: str = "saved_models/best_sentiment_model.pkl") -> None:
-    """Serializes and saves the trained pipeline model to disk."""
-    os.makedirs(os.path.dirname(filepath), exist_ok=True)
-    with open(filepath, "wb") as f:
-        pickle.dump(model, f)
-    logger.info(f"Model successfully saved to {filepath}")
-
-
-def load_model(filepath: str = "saved_models/best_sentiment_model.pkl") -> Any:
-    """Loads a serialized pipeline model from disk."""
-    if not os.path.exists(filepath):
-        raise FileNotFoundError(f"No saved model found at {filepath}")
-    with open(filepath, "rb") as f:
-        model = pickle.load(f)
-    logger.info(f"Model successfully loaded from {filepath}")
-    return model
-
-
-def predict_sentiment(model: Any, texts: List[str]) -> List[Dict[str, Any]]:
-    """Runs predictions on new lists of text using the pipeline model."""
-    if not texts:
-        return []
-    
-    cleaned = [clean_text(t) for t in texts]
-    predictions = model.predict(cleaned)
-    
-    results = []
-    for original, pred in zip(texts, predictions):
-        results.append({
-            "text": original,
-            "predicted_sentiment": pred
-        })
-    return results
-
-
 def run_full_pipeline(
     df: pd.DataFrame,
     text_column: str,
     rating_column: Optional[str] = None,
     progress_cb=None,
     custom_categories: Optional[dict] = None,
-    use_transformer: bool = False,
-    **kwargs,
 ) -> Dict[str, Any]:
     """
     Runs the full machine learning pipeline including cleaning, model training,
@@ -307,9 +268,6 @@ def run_full_pipeline(
     """
     if custom_categories is not None:
         logger.info("Custom categories supplied for downstream analysis: %s", sorted(custom_categories.keys())[:10])
-
-    if use_transformer:
-        logger.info("Transformer mode requested; using the standard sklearn pipeline fallback for compatibility.")
 
     if progress_cb:
         try:
@@ -376,12 +334,9 @@ def run_full_pipeline(
         except Exception:
             pass
 
-    # 7. Save the best model artifact
-    save_model(best_model)
-
     if progress_cb:
         try:
-            progress_cb("Pipeline finished successfully!", 100)
+            progress_cb("Finalizing pipeline...", 90)
         except Exception:
             pass
 

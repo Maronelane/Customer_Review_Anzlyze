@@ -23,30 +23,6 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json();
 }
 
-export interface UploadResponse {
-  analysis_id: string;
-  filename: string;
-  columns: string[];
-  row_count: number;
-  preview: Record<string, unknown>[];
-  stored_path: string;
-}
-
-export interface AnalyzeResponse {
-  analysis_id: string;
-  status: string;
-  best_model: string;
-  best_accuracy: number;
-  sentiment_distribution: {
-    positive: number;
-    negative: number;
-    neutral: number;
-    total: number;
-  };
-  problem_count: number;
-  total_recommendations: number;
-}
-
 export interface Problem {
   category: string;
   category_key: string;
@@ -146,23 +122,6 @@ export interface SpamData {
   clean_count: number;
 }
 
-export interface ClusterSummary {
-  cluster_id: number;
-  label: string;
-  count: number;
-  positive: number;
-  negative: number;
-  neutral: number;
-  negative_pct: number;
-  severity: string;
-  sample_reviews: string[];
-}
-
-export interface ClusterData {
-  clusters: ClusterSummary[];
-  total_clusters: number;
-}
-
 export interface Analysis {
   id: string;
   filename: string;
@@ -178,32 +137,6 @@ export interface ProgressData {
   step: string;
   percent: number;
   status?: string;
-}
-
-export function uploadDataset(file: File, textColumn: string, ratingColumn: string) {
-  const formData = new FormData();
-  formData.append("file", file);
-  if (textColumn) formData.append("text_column", textColumn);
-  if (ratingColumn) formData.append("rating_column", ratingColumn);
-
-  return apiFetch<UploadResponse>("/upload", {
-    method: "POST",
-    body: formData,
-  });
-}
-
-export function runAnalysis(analysisId: string, textColumn: string, ratingColumn: string, customCategories?: Record<string, string[]>, useTransformer?: boolean) {
-  return apiFetch<AnalyzeResponse>("/analyze", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      analysis_id: analysisId,
-      text_column: textColumn,
-      rating_column: ratingColumn,
-      custom_categories: customCategories || null,
-      use_transformer: useTransformer || false,
-    }),
-  });
 }
 
 export function getResults(analysisId: string, model?: string) {
@@ -234,20 +167,6 @@ export function getProgress(analysisId: string) {
 
 export function listAnalyses() {
   return apiFetch<Analysis[]>("/analyses");
-}
-
-export function rerunAnalysis(analysisId: string, textColumn?: string, ratingColumn?: string, customCategories?: Record<string, string[]>, useTransformer?: boolean) {
-  return apiFetch<AnalyzeResponse>("/rerun", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      analysis_id: analysisId,
-      text_column: textColumn,
-      rating_column: ratingColumn,
-      custom_categories: customCategories || null,
-      use_transformer: useTransformer || false,
-    }),
-  });
 }
 
 export interface TrendPoint {
@@ -283,14 +202,4 @@ export function getAiSummary(analysisId: string, model?: string) {
 export function getSpamSummary(analysisId: string, model?: string) {
   const qs = model ? `?model=${model}` : "";
   return apiFetch<SpamData>(`/spam/${analysisId}${qs}`);
-}
-
-export function getClusters(analysisId: string) {
-  return apiFetch<ClusterData>(`/clusters/${analysisId}`);
-}
-
-export function getClusterReviews(analysisId: string, clusterId: number) {
-  return apiFetch<{ cluster_id: number; reviews: Prediction[]; count: number }>(
-    `/clusters/${analysisId}/${clusterId}`
-  );
 }

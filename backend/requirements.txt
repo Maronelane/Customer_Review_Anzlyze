@@ -13,6 +13,4 @@ python-jose[cryptography]
 openpyxl
 reportlab
 flasgger
-transformers
-torch
 textblob

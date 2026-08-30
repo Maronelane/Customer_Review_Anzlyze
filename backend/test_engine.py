@@ -23,7 +23,6 @@ def test_sentiment_detection():
 def test_run_full_pipeline_api_matches_app_calls():
     params = inspect.signature(run_full_pipeline).parameters
     assert "custom_categories" in params
-    assert "use_transformer" in params
 
 
 def test_ml_results_are_serializable_for_mongo():

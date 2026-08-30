@@ -65,6 +65,8 @@ export default function SpamDetection({ analysisId, activeModel }: Props) {
   const riskLevel = pct > 20 ? "high" : pct > 10 ? "medium" : "low";
   const cleanCount = (ss?.total_reviews ?? 0) - (ss?.total_flagged ?? 0);
   const displayed = showAll ? flagged_reviews : flagged_reviews.slice(0, 8);
+  // Show small but real percentages so ~0.02% isn't rounded to a false "0%".
+  const pctLabel = pct < 0.1 && pct > 0 ? pct.toFixed(2) : pct.toFixed(1);
 
   // Aggregate why reviews were flagged (using explainable backend signals)
   const signalCounts: Record<string, number> = {};
@@ -87,13 +89,13 @@ export default function SpamDetection({ analysisId, activeModel }: Props) {
               cx="50" cy="50" r="38" fill="none"
               stroke={RISK_COLOR[riskLevel]}
               strokeWidth="12"
-              strokeDasharray={`${(pct / 100) * 238.76} ${238.76}`}
+              strokeDasharray={`${Math.max((pct / 100) * 238.76, pct > 0 ? 2 : 0)} ${238.76}`}
               strokeDashoffset="0"
               strokeLinecap="round"
               transform="rotate(-90 50 50)"
               className="donut-segment"
             />
-            <text x="50" y="46" textAnchor="middle" className="donut-total">{pct}%</text>
+            <text x="50" y="46" textAnchor="middle" className="donut-total">{pctLabel}%</text>
             <text x="50" y="60" textAnchor="middle" className="donut-label">spam rate</text>
           </svg>
         </div>
@@ -118,10 +120,11 @@ export default function SpamDetection({ analysisId, activeModel }: Props) {
         <h4>How scores work</h4>
         <p>
           A review is only flagged for a clear, objective reason — most commonly because
-          its text is <strong>duplicated many times across the dataset</strong> (a classic
-          fake-review / bot pattern), or because it contains <strong>promotional content</strong>
-          such as links, contact details, or "buy now" language. A short or generic review on its
-          own ("good", "bad product") is <strong>not</strong> flagged.
+          it contains <strong>promotional content</strong> such as links, contact details,
+          or "buy now" language, or because its <strong>substantive text is duplicated many
+          times across the dataset</strong> (a classic copy-paste fake-review / bot pattern).
+          Short or generic praise ("good", "nice") is <strong>never</strong> flagged, even
+          when many different customers happen to repeat it — that's genuine crowd behaviour.
         </p>
         <div className="spam-legend-scales">
           <span className="legend-scale low">0–54% · Genuine</span>

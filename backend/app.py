@@ -272,7 +272,6 @@ def analyze():
         text_column = data.get("text_column")
         rating_column = data.get("rating_column")
         custom_categories = data.get("custom_categories")
-        use_transformer = data.get("use_transformer", False)
 
         if not analysis_id:
             return jsonify({"error": "analysis_id is required"}), 400
@@ -305,8 +304,7 @@ def analyze():
 
                 ml_results = run_full_pipeline(df, text_col, rating_col,
                                                progress_cb=progress_cb,
-                                               custom_categories=custom_categories,
-                                               use_transformer=use_transformer)
+                                               custom_categories=custom_categories)
 
                 set_progress(analysis_id, "Detecting spam & fake reviews", 65)
                 detect_spam(ml_results["predictions"])
@@ -340,7 +338,7 @@ def analyze():
                 spam_summary = {
                     "total_flagged": spam_count,
                     "total_reviews": total,
-                    "flagged_percentage": round(spam_count / max(total, 1) * 100, 1),
+                    "flagged_percentage": round(spam_count / max(total, 1) * 100, 2),
                 }
 
                 # Build per-model full results
@@ -372,7 +370,7 @@ def analyze():
                         "spam_summary": {
                             "total_flagged": m_spam_count,
                             "total_reviews": m_total,
-                            "flagged_percentage": round(m_spam_count / max(m_total, 1) * 100, 1),
+                            "flagged_percentage": round(m_spam_count / max(m_total, 1) * 100, 2),
                         },
                         "cluster_summary": m_cluster_summary,
                         "predictions": m_preds,
@@ -482,10 +480,7 @@ def predictions(analysis_id):
 
 
 # ──────────────────────────────────────────────
-# Trend Analysis (Fully Fixed & Robust)
-# ──────────────────────────────────────────────
-# ──────────────────────────────────────────────
-# Trend Analysis (Monthly Aggregation)
+# Trend Analysis (Sentiment by Month)
 # ──────────────────────────────────────────────
 @app.route("/api/trend/<analysis_id>")
 def trend_analysis(analysis_id):
@@ -571,7 +566,18 @@ def trend_analysis(analysis_id):
 # ──────────────────────────────────────────────
 @app.route("/api/word-frequency/<analysis_id>")
 def word_frequency(analysis_id):
-    """Get word frequency counts from analyzed reviews with improved accuracy."""
+    """Get word frequency counts from analyzed reviews with high accuracy.
+
+    Improvements over the naive implementation:
+      * Keeps meaningful review words (good, great, bad, battery...) instead of
+        wrongly treating them as stopwords.
+      * Merges word forms via lemmatization / form mapping (sound/sounds/sound,
+        work/working/worked -> work).
+      * Attributes each word to a sentiment using its OWN sentence (with
+        negation flipping), not the whole review, so the positive/negative tabs
+        are realistic instead of diluted.
+      * Excludes spam and drops noisy bigrams so the cloud shows real themes.
+    """
     try:
         analysis = get_analysis(analysis_id)
         if not analysis:
@@ -582,67 +588,131 @@ def word_frequency(analysis_id):
         predictions = predictions_data.get("predictions", [])
 
         from nltk.corpus import stopwords
-        from ml_engine import clean_text
-        from collections import Counter
+        from nltk.stem import WordNetLemmatizer
+        from nltk.tokenize import sent_tokenize
+        from ml_engine import LEMMATIZER
 
-        stop_words = set(stopwords.words("english"))
-        stop_words.update({
+        # Feature-relevant words that should NEVER be dropped just because they
+        # are common English filler. These carry real meaning in review analysis.
+        _MEANINGFUL = {
+            "good", "great", "bad", "well", "better", "best", "worst", "nice",
+            "excellent", "amazing", "awesome", "superb", "poor", "terrible",
+            "battery", "sound", "quality", "price", "product", "works", "work",
+            "camera", "display", "screen", "fast", "slow", "comfortable",
+        }
+        stop_words = set(stopwords.words("english")) - _MEANINGFUL
+        stop_words |= {
             "this", "that", "with", "from", "have", "been", "were", "they",
             "their", "would", "could", "should", "about", "also", "just",
-            "only", "very", "really", "much", "more", "than", "some", "into",
-            "like", "when", "what", "which", "there", "then", "them", "each",
-            "made", "make", "thing", "things", "one", "two", "get", "got",
-            "back", "even", "still", "after", "before", "being", "over",
-            "such", "through", "good", "well", "first", "last", "long",
-            "great", "little", "own", "other", "old", "right", "big", "high",
-            "small", "large", "next", "early", "young", "important", "few",
-            "public", "bad", "same", "able", "every", "found", "look", "day",
-        })
+            "only", "very", "much", "more", "than", "some", "into", "made",
+            "make", "thing", "things", "one", "two", "get", "got", "back",
+            "even", "still", "after", "before", "being", "over", "such",
+            "through", "first", "last", "long", "little", "own", "other",
+            "old", "right", "big", "high", "small", "large", "next", "early",
+            "young", "important", "same", "able", "every", "found", "look",
+            "day", "would", "really", "the", "and", "for", "are", "was",
+        }
+        stop_words.discard("not")
+        stop_words.discard("no")
+
+        # Compact polarity lexicon for sentence-level sentiment attribution.
+        _POS = set("""good great nice excellent amazing awesome superb fantastic
+            wonderful perfect love loved loves best better awesome cool outstanding
+            brilliant great comfortable fast smooth crisp clear sharp bright easy
+            happy satisfied impressive premium solid robust stunning super quality
+            value useful helpful durable reliable powerful responsive""".split())
+        _NEG = set("""bad poor terrible worst awful horrible disappointing
+            disappointed useless broken waste cheap flimsy slow stuck lag issue
+            problem problems complaint complain defective faulty dead fail failed
+            fails not_work not_works not_working dont_work dont_works heavy noise
+            noisy crack scratched scratch stop stopped stopping hate waste worst""".split())
+        _NEG_WORDS = {"not", "no", "never", "dont", "doesnt", "didnt", "cant",
+                      "wont", "wasnt", "isnt", "arent", "hardly", "barely"}
+
+        # Merge common inflected verb/word forms to a single base so review
+        # themes aren't fragmented (work/working/worked/works -> work). The
+        # default noun lemmatizer misses verb forms, so we map the frequent ones.
+        _WORD_BASE = {
+            "works": "work", "worked": "work", "working": "work",
+            "using": "use", "used": "use",
+            "buying": "buy", "bought": "buy",
+            "charging": "charge", "charged": "charge",
+            "connecting": "connect", "connected": "connect",
+            "disconnecting": "disconnect", "disconnected": "disconnect",
+            "pairing": "pair", "paired": "pair",
+            "loved": "love",
+            "feeling": "feel",
+            "improved": "improve", "improving": "improve",
+            "expected": "expect",
+        }
+
+        def _base_word(word):
+            return _WORD_BASE.get(word, word)
 
         word_counts: dict[str, dict] = {}
-        bigram_counts: dict[str, dict] = {}
 
         for pred in predictions:
+            # Exclude spam so junk/flags don't distort the cloud.
+            if pred.get("is_flagged"):
+                continue
             text = str(pred.get("review_text", ""))
-            sentiment = pred.get("sentiment", "neutral")
+            if not text.strip():
+                continue
 
-            cleaned = re.sub(r"[^\w\s]", "", text.lower().strip())
-            tokens = [
-                w for w in cleaned.split()
-                if len(w) > 2 and w not in stop_words and w.isalpha()
-            ]
+            for sentence in sent_tokenize(text) or [text]:
+                raw = re.sub(r"[^\w\s]", " ", sentence.lower())
+                tokens = [t for t in raw.split() if len(t) > 2 and t.isalpha()]
+                if not tokens:
+                    continue
 
-            for word in tokens:
-                if word not in word_counts:
-                    word_counts[word] = {"word": word, "total": 0, "positive": 0, "negative": 0, "neutral": 0}
-                word_counts[word]["total"] += 1
-                if sentiment in ["positive", "negative", "neutral"]:
-                    word_counts[word][sentiment] += 1
+                # 1. Clean + lemmatize, remembering whether each token is
+                #    locally negated (the 2 tokens after a negation word).
+                scoped = []
+                pending_neg = 0
+                for t in tokens:
+                    if t in _NEG_WORDS:
+                        pending_neg = 2
+                        continue
+                    if pending_neg > 0:
+                        scoped.append(("not_" + LEMMATIZER.lemmatize(t)) if t not in stop_words else None)
+                        pending_neg -= 1
+                    else:
+                        scoped.append(LEMMATIZER.lemmatize(t) if t not in stop_words else None)
 
-            for i in range(len(tokens) - 1):
-                bigram = f"{tokens[i]} {tokens[i+1]}"
-                if bigram not in bigram_counts:
-                    bigram_counts[bigram] = {"word": bigram, "total": 0, "positive": 0, "negative": 0, "neutral": 0}
-                bigram_counts[bigram]["total"] += 1
-                if sentiment in ["positive", "negative", "neutral"]:
-                    bigram_counts[bigram][sentiment] += 1
+                # 2. Local sentence sentiment (negation-aware).
+                pos = neg = 0
+                for w in scoped:
+                    if not w:
+                        continue
+                    negated = w.startswith("not_")
+                    base = w[4:] if negated else w
+                    if base in _POS:
+                        if negated:
+                            neg += 1
+                        else:
+                            pos += 1
+                    elif base in _NEG:
+                        if negated:
+                            pos += 1
+                        else:
+                            neg += 1
+                sent = "positive" if pos > neg else ("negative" if neg > pos else "neutral")
 
-        all_words = list(word_counts.values())
+                # 3. Count each clean word under that local sentiment.
+                for w in scoped:
+                    if not w or len(w) < 3:
+                        continue
+                    word = _base_word(w[4:] if w.startswith("not_") else w)
+                    if word in stop_words:
+                        continue
+                    entry = word_counts.get(word) or {
+                        "word": word, "total": 0, "positive": 0, "negative": 0, "neutral": 0,
+                    }
+                    entry["total"] += 1
+                    entry[sent] += 1
+                    word_counts[word] = entry
 
-        significant_bigrams = [
-            bg for bg in bigram_counts.values()
-            if bg["total"] >= 3
-        ]
-
-        combined = all_words + significant_bigrams
-        seen = set()
-        unique = []
-        for item in combined:
-            if item["word"] not in seen:
-                seen.add(item["word"])
-                unique.append(item)
-
-        sorted_words = sorted(unique, key=lambda x: x["total"], reverse=True)[:120]
+        sorted_words = sorted(word_counts.values(), key=lambda x: x["total"], reverse=True)[:120]
         return jsonify({"words": sorted_words})
     except Exception as e:
         return jsonify({"error": f"Word frequency failed: {str(e)}"}), 500
@@ -844,8 +914,14 @@ def email_report():
         if not results_data:
             return jsonify({"error": "Results not ready yet"}), 404
 
-        send_report_email(to_email, analysis_id, {"analysis": analysis, "results": results_data})
-        return jsonify({"status": "sent", "email": to_email})
+        formats = data.get("formats", ["pdf"])
+        if isinstance(formats, str):
+            formats = [formats]
+        allowed = {"pdf", "excel"}
+        formats = [f for f in formats if f in allowed] or ["pdf"]
+
+        send_report_email(to_email, analysis_id, {"analysis": analysis, "results": results_data}, formats=tuple(formats))
+        return jsonify({"status": "sent", "email": to_email, "formats": formats})
     except Exception as e:
         return jsonify({"error": f"Email failed: {str(e)}"}), 500
 
@@ -885,7 +961,6 @@ def rerun():
         text_column = data.get("text_column")
         rating_column = data.get("rating_column")
         custom_categories = data.get("custom_categories")
-        use_transformer = data.get("use_transformer", False)
 
         if not original_id:
             return jsonify({"error": "analysis_id is required"}), 400
@@ -923,8 +998,7 @@ def rerun():
 
         ml_results = run_full_pipeline(df, text_col, rating_col,
                                        progress_cb=progress_cb,
-                                       custom_categories=custom_categories,
-                                       use_transformer=use_transformer)
+                                       custom_categories=custom_categories)
 
         detect_spam(ml_results["predictions"])
         detect_duplicates(ml_results["predictions"])
@@ -949,7 +1023,7 @@ def rerun():
         spam_summary = {
             "total_flagged": spam_count,
             "total_reviews": len(ml_results["predictions"]),
-            "flagged_percentage": round(spam_count / max(len(ml_results["predictions"]), 1) * 100, 1),
+            "flagged_percentage": round(spam_count / max(len(ml_results["predictions"]), 1) * 100, 2),
         }
 
         model_runs = {}
@@ -980,7 +1054,7 @@ def rerun():
                 "spam_summary": {
                     "total_flagged": m_spam_count,
                     "total_reviews": m_total,
-                    "flagged_percentage": round(m_spam_count / max(m_total, 1) * 100, 1),
+                    "flagged_percentage": round(m_spam_count / max(m_total, 1) * 100, 2),
                 },
                 "cluster_summary": m_cluster_summary,
                 "predictions": m_preds,
@@ -1056,44 +1130,6 @@ def spam_summary(analysis_id):
 # ──────────────────────────────────────────────
 # Root Cause Clustering Endpoint
 # ──────────────────────────────────────────────
-@app.route("/api/clusters/<analysis_id>")
-def cluster_endpoint(analysis_id):
-    """Get cluster summary and reviews for an analysis."""
-    try:
-        results_data = get_results(analysis_id)
-        if not results_data:
-            return jsonify({"error": "Results not found"}), 404
-
-        cluster_summary = results_data.get("cluster_summary", [])
-
-        return jsonify({
-            "clusters": cluster_summary,
-            "total_clusters": len(cluster_summary),
-        })
-    except Exception as e:
-        return jsonify({"error": f"Cluster endpoint failed: {str(e)}"}), 500
-
-
-@app.route("/api/clusters/<analysis_id>/<int:cluster_id>")
-def cluster_reviews_endpoint(analysis_id, cluster_id):
-    """Get all reviews in a specific cluster."""
-    try:
-        from db import get_db
-        db = get_db()
-        reviews = list(db.predictions.find(
-            {"analysis_id": analysis_id, "cluster_id": cluster_id},
-            {"_id": 0},
-        ).limit(100))
-
-        return jsonify({
-            "cluster_id": cluster_id,
-            "reviews": reviews,
-            "count": len(reviews),
-        })
-    except Exception as e:
-        return jsonify({"error": f"Cluster reviews failed: {str(e)}"}), 500
-
-
 # ──────────────────────────────────────────────
 # Serve Built Frontend (SPA Fallback)
 # ──────────────────────────────────────────────

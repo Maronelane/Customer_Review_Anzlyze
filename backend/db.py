@@ -2,6 +2,7 @@
 MongoDB database for storing analysis results.
 """
 import os
+import re
 import uuid
 from datetime import datetime, timezone
 
@@ -167,13 +168,53 @@ def get_results(analysis_id: str):
     return doc
 
 
+def _search_patterns(query: str, *, prefix: bool = False) -> list[str]:
+    """Per-term, word-boundary-aware regex patterns for a user search query.
+
+    - All regex metacharacters are escaped, so searching for "(", "4.5" or
+      "100% OK!" never crashes MongoDB and always matches literally.
+    - Single-word queries match whole words only ("bad" won't match "badge").
+    - Multi-word queries return one pattern per term so callers can AND them,
+      meaning "not working" finds reviews mentioning BOTH words, not every
+      review mentioning "working" alone.
+    - `prefix=True` relaxes to word-boundary prefixes so "batt" matches
+      "battery" and "charge" matches "charging".
+    Uses `$and` + one regex per term (NOT lookaheads), which stays fast even on
+    large corpora.
+    """
+    terms = query.strip().split()
+    patterns = []
+    for term in terms:
+        escaped = re.escape(term)
+        if re.fullmatch(r"[A-Za-z0-9_']+", term):
+            if prefix:
+                patterns.append(rf"\b{escaped}")
+            else:
+                patterns.append(rf"\b{escaped}\b")
+        else:
+            patterns.append(escaped)
+    return patterns
+
+
 def get_predictions(analysis_id: str, limit: int = 100, offset: int = 0, sentiment_filter: str = None, search_query: str = None, model: str = None):
     db = get_db()
     query = {"analysis_id": analysis_id}
     if sentiment_filter:
         query["sentiment"] = sentiment_filter
     if search_query:
-        query["review_text"] = {"$regex": search_query, "$options": "i"}
+        stripped = search_query.strip()
+        if stripped:
+            # Precise word matching first; fall back to prefix matching when the
+            # exact query finds nothing, so "batt" still finds "battery".
+            try:
+                patterns = _search_patterns(stripped)
+                probe = {"analysis_id": analysis_id, "$and": [{"review_text": {"$regex": p, "$options": "i"}} for p in patterns]}
+                if db.predictions.count_documents(probe) == 0:
+                    patterns = _search_patterns(stripped, prefix=True)
+                query["$and"] = [{"review_text": {"$regex": p, "$options": "i"}} for p in patterns]
+            except Exception:
+                # Absolute fallback: literal substring via escaped query.
+                query["review_text"] = {"$regex": re.escape(stripped), "$options": "i"}
 
     if model:
         model_query = {**query, "model": model}

@@ -97,7 +97,9 @@ def cluster_reviews(
     except ValueError:
         return predictions
 
-    n_clusters = min(max_k, max(2, len(texts) // 15))
+    # Fewer, broader clusters are easier to interpret as "root causes". Scale
+    # slowly with corpus size and cap at a small number.
+    n_clusters = min(max_k, max(3, round(len(texts) / 120)))
 
     try:
         km = MiniBatchKMeans(n_clusters=n_clusters, random_state=42, batch_size=1000, n_init=3)
@@ -108,7 +110,11 @@ def cluster_reviews(
     try:
         if len(set(labels)) > 1 and len(labels) > n_clusters:
             score = silhouette_score(tfidf_matrix, labels, sample_size=min(5000, len(labels)))
-            if score < 0.05:
+            # Real-world short review text yields naturally LOW silhouette scores
+            # (often ~0.03-0.1). Only abandon clustering when the partition is
+            # genuinely worse than random (negative); otherwise keep the groups,
+            # which are still meaningful themes despite being noisy.
+            if score < -0.01:
                 return predictions
     except Exception:
         pass

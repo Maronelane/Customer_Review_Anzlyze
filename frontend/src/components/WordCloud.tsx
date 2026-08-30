@@ -55,6 +55,13 @@ export default function WordCloud({ analysisId, activeModel }: Props) {
 
   const getWordColor = (w: WordFreq): string => {
     if (active !== "all") return SENTIMENT_COLORS[active];
+    // In "all" mode colour each word by its dominant sentiment so the cloud
+    // reads the real polarity mix at a glance instead of one flat grey.
+    if (w.positive >= w.negative && w.positive >= w.neutral && w.positive > 0)
+      return SENTIMENT_COLORS.positive;
+    if (w.negative >= w.positive && w.negative >= w.neutral && w.negative > 0)
+      return SENTIMENT_COLORS.negative;
+    if (w.neutral > 0) return SENTIMENT_COLORS.neutral;
     return "var(--text-secondary)";
   };
 

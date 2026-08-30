@@ -25,11 +25,16 @@ from collections import Counter
 
 FLAG_THRESHOLD = 0.55
 # Duplicate detection: identical (normalized) text must appear at least this many
-# times before it is flagged. Real customers occasionally write identical short
-# reviews (e.g. several people typing "good" or "nice"), so requiring a high
-# count separates genuine crowd behaviour from a coordinated bot campaign.
+# times before it is flagged.
 DUPLICATE_MIN_COPIES = 10
-# Score given to a duplicated review.
+# A duplicate is only spam if it is SUBSTANTIVE. Millions of real customers
+# write ultra-short praise ("good", "nice", "super", "great product") and a
+# handful of those texts happen to repeat many times in real datasets — that
+# genuine crowd behaviour is NOT spam. So a repeated text must carry enough real
+# content (this many words) before we consider it a possible copy-paste bot
+# campaign. Repeated short praise is never flagged, no matter how many copies.
+MIN_SUBSTANTIVE_WORDS = 6
+# Score given to a duplicated (and substantive) review.
 DUPLICATE_SCORE = 0.85
 
 
@@ -45,23 +50,46 @@ class _Reasons:
 
 
 # ── Signal A: Promotional / link / contact spam ──
-_PROMO_WORDS = [
-    "coupon", "discount code", "promo", "click here", "free shipping",
-    "limited offer", "act now", "subscribe", "buy now", "check out my",
-    "visit my", "follow me", "click the link", "link in bio", "affiliate",
-    "referral link", "best deal", "huge discount", "sale now", "order now",
-    "shop now", "enroll", "sign up", "deals on", "price drop",
+# These are INTENT-BASED phrases used to solicit / self-promote / advertise.
+# Genuine customers praising a product almost never say these things, so a hit is
+# a safe "decisive" signal. Ordinary enthusiasm or praise ("best deal", "great
+# price", "hurry", "going to buy now", "my next order now") is NOT here — that is
+# everyday customer language, not promotional spam.
+_PROMO_PHRASES = [
+    # Affiliate / self-promotion / solicitation with intent
+    "link in bio", "click the link", "click this link", "click on the link",
+    "open the link", "check out my", "visit my", "follow me", "dm me",
+    "contact me", "whatsapp me", "my whatsapp", "my telegram", "my instagram",
+    "my youtube", "my channel", "order from my", "buy from my", "sold on my",
+    "available on my", "affiliate", "referral link", "referral code",
+    # Coupon / deal codes (not just the word "coupon" alone — require intent)
+    "coupon code", "discount code", "promo code", "offer code", "promo code",
 ]
+# A superset used by the duplicate/substantive check so a repeated text full of
+# promotional intent is treated as spam even if short.
+_PROMO_WORDS = _PROMO_PHRASES
 
 
 def _promo_score(text, reasons: _Reasons) -> float:
-    """Flag promotional / link / contact spam. Strong, objective signal."""
+    """Flag promotional / link / contact spam. Strong, objective signal.
+
+    Only explicit, intent-revealing promotional content is flagged. A genuine
+    review that happens to say "best deal" or "I'm going to buy now" is praise,
+    not spam, and is never flagged here."""
     cleaned = (text or "").lower()
 
-    if re.search(r"https?://|www\.", cleaned):
+    # URL: a real scheme or "www." followed by a true domain, or a bare domain
+    # with a TLD or path. Crucially this must NOT match "wowwww" or "wow..." —
+    # we require "www." to be followed by a letter/number domain character.
+    if re.search(r"https?://", cleaned):
         reasons.add("Contains URL", "Includes a web link")
         return 0.95
-    if re.search(r"\b[\w.-]+@[\w.-]+\.(?:com|net|org|io|co|in|edu|gov|me|biz|info|xyz|online|site|shop|store)\b", cleaned):
+    if re.search(r"\bwww\.[a-z0-9][a-z0-9\-]*\.[a-z]{2,}", cleaned):
+        reasons.add("Contains URL", "Includes a website link")
+        return 0.95
+
+    # Email: requires a real-looking local part then a domain TLD.
+    if re.search(r"\b[\w.!#$%&'*+/=?^`{|}~-]+@[a-z0-9\-]+(?:\.[a-z0-9\-]+)*\.(?:com|net|org|io|co|in|edu|gov|me|biz|info|xyz|online|site|shop|store)\b", cleaned):
         reasons.add("Contact info", "Contains an email address")
         return 0.9
 
@@ -77,11 +105,11 @@ def _promo_score(text, reasons: _Reasons) -> float:
             reasons.add("Contact info", "Contains a phone number")
             return 0.8
 
-    # Generic URL mention like "check on amazon" isn't spam; target explicit
-    # promotional call-to-action instead.
-    hits = [w for w in _PROMO_WORDS if w in cleaned]
+    # Intent-revealing promotional phrases. Genuine product praise doesn't say
+    # "link in bio", "dm me", "coupon code", "subscribe to my channel", etc.
+    hits = [w for w in _PROMO_PHRASES if w in cleaned]
     if hits:
-        reasons.add("Promotional", f"Uses promotional call-to-action: {', '.join(hits[:3])}")
+        reasons.add("Promotional", f"Uses promotional/solicitation language: {', '.join(hits[:3])}")
         return 0.75
 
     return 0.0
@@ -187,21 +215,45 @@ def _normalize(text: str) -> str:
     return re.sub(r"\s+", " ", re.sub(r"[^\w\s]", "", text.lower().strip()))
 
 
+def _is_substantive(norm_text: str) -> bool:
+    """Is a repeated text substantive enough to be a likely bot campaign?
+
+    Repeating ultra-short praise ("good", "nice", "super") across many reviews is
+    normal human crowd behaviour, not spam. We only flag a duplicate once it
+    carries real informational content (enough words) OR contains promotional /
+    link / contact signals. This keeps the many genuine one-word "good" reviews
+    clean while still catching classic copy-paste bot spam."""
+    words = norm_text.split()
+    if len(words) >= MIN_SUBSTANTIVE_WORDS:
+        return True
+    # Promotional / link / contact signals make even a short repeat suspicious.
+    cleaned = norm_text
+    if re.search(r"https?://|www\.", cleaned):
+        return True
+    if re.search(r"\b[\w.-]+@[\w.-]+\.(?:com|net|org|io|co|in|edu|gov|me|biz|info|xyz|online|site|shop|store)\b", cleaned):
+        return True
+    if re.search(r"(?:\+?\d[\s\-]?){8,}\d", cleaned):
+        return True
+    if any(w in cleaned for w in _PROMO_WORDS):
+        return True
+    return False
+
+
 def detect_duplicates(predictions: list[dict],
                       min_copies: int = DUPLICATE_MIN_COPIES) -> list[dict]:
-    """Flag duplicate reviews. Identical text appearing VERY many times is the
-    classic fake-review / bot signal. A high threshold is used deliberately so
-    that legitimate short reviews written by many different customers (e.g.
-    "good" or "nice") are not all falsely flagged.
-
-    Any review whose normalized text appears >= min_copies times is flagged,
-    regardless of length or sentiment."""
+    """Flag duplicate reviews. A repeated review is treated as spam only when it
+    is SUBSTANTIVE (carries real content or promotional signals). Ultra-short
+    praise that many different customers happen to repeat ("good", "nice") is
+    genuine crowd behaviour and is deliberately NOT flagged."""
     counts: dict[str, int] = {}
     for pred in predictions:
         norm = _normalize(str(pred.get("text", pred.get("review_text", ""))))
         counts[norm] = counts.get(norm, 0) + 1
 
-    duplicated = {t for t, c in counts.items() if c >= min_copies and t}
+    duplicated = {
+        t for t, c in counts.items()
+        if c >= min_copies and t and _is_substantive(t)
+    }
 
     for pred in predictions:
         norm = _normalize(str(pred.get("text", pred.get("review_text", ""))))
