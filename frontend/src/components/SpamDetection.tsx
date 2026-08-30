@@ -12,36 +12,20 @@ const SENTIMENT_COLOR: Record<string, string> = {
   neutral: "#f59e0b",
 };
 
-function getSpamReasons(review: Prediction): string[] {
-  const reasons: string[] = [];
-  const text = review.review_text || "";
-  const len = text.trim().length;
+const RISK_COLOR: Record<string, string> = {
+  high: "#ef4444",
+  medium: "#f59e0b",
+  low: "#22c55e",
+};
 
-  if (len < 10) reasons.push("Too short");
-  else if (len < 25) reasons.push("Very brief");
+const RISK_LABEL: Record<string, string> = {
+  high: "High risk",
+  medium: "Medium risk",
+  low: "Low risk",
+};
 
-  const words = text.toLowerCase().split(/\s+/);
-  const uniqueRatio = new Set(words).size / Math.max(words.length, 1);
-  if (uniqueRatio < 0.3 && words.length > 3) reasons.push("Repetitive");
-
-  const capsRatio = (text.match(/[A-Z]/g) || []).length / Math.max(text.length, 1);
-  if (capsRatio > 0.5) reasons.push("Excessive caps");
-
-  if (/[!?]{3,}/.test(text)) reasons.push("Excessive punctuation");
-
-  if (/https?:\/\/|www\.|\.com/i.test(text)) reasons.push("Contains URL");
-
-  const genericPhrases = ["good product", "great product", "love it", "best product",
-    "amazing", "highly recommend", "10/10", "must buy", "terrible", "worst", "do not buy"];
-  const genericCount = genericPhrases.filter(p => text.toLowerCase().includes(p)).length;
-  if (genericCount >= 2) reasons.push("Generic phrases");
-  else if (genericCount === 1 && len < 40) reasons.push("Generic & short");
-
-  const promoWords = ["coupon", "discount", "promo", "free shipping", "act now", "subscribe"];
-  if (promoWords.some(w => text.toLowerCase().includes(w))) reasons.push("Promotional");
-
-  if (reasons.length === 0) reasons.push("Suspicious pattern");
-  return reasons;
+function fmtScore(score: number): string {
+  return (score * 100).toFixed(0) + "%";
 }
 
 export default function SpamDetection({ analysisId, activeModel }: Props) {
@@ -82,15 +66,16 @@ export default function SpamDetection({ analysisId, activeModel }: Props) {
   const cleanCount = (ss?.total_reviews ?? 0) - (ss?.total_flagged ?? 0);
   const displayed = showAll ? flagged_reviews : flagged_reviews.slice(0, 8);
 
-  const reasonCounts: Record<string, number> = {};
+  // Aggregate why reviews were flagged (using explainable backend signals)
+  const signalCounts: Record<string, number> = {};
   (flagged_reviews || []).forEach((r) => {
-    getSpamReasons(r).forEach((reason) => {
-      reasonCounts[reason] = (reasonCounts[reason] || 0) + 1;
+    (r.spam_reasons || []).forEach((reason) => {
+      signalCounts[reason.signal] = (signalCounts[reason.signal] || 0) + 1;
     });
   });
-  const topReasons = Object.entries(reasonCounts)
+  const topSignals = Object.entries(signalCounts)
     .sort((a, b) => b[1] - a[1])
-    .slice(0, 5);
+    .slice(0, 6);
 
   return (
     <>
@@ -100,7 +85,7 @@ export default function SpamDetection({ analysisId, activeModel }: Props) {
             <circle cx="50" cy="50" r="38" fill="none" stroke="var(--bg-hover)" strokeWidth="12" />
             <circle
               cx="50" cy="50" r="38" fill="none"
-              stroke={riskLevel === "high" ? "#ef4444" : riskLevel === "medium" ? "#f59e0b" : "#22c55e"}
+              stroke={RISK_COLOR[riskLevel]}
               strokeWidth="12"
               strokeDasharray={`${(pct / 100) * 238.76} ${238.76}`}
               strokeDashoffset="0"
@@ -129,13 +114,27 @@ export default function SpamDetection({ analysisId, activeModel }: Props) {
         </div>
       </div>
 
-      {topReasons.length > 0 && (
+      <div className="spam-score-legend">
+        <h4>How scores work</h4>
+        <p>
+          Each review gets a <strong>spam confidence</strong> (0–100%) from a weighted check of
+          signals: URL/contact info, generic template wording, repetition, excessive caps/punctuation,
+          promotional language, and very brief emotive reviews.
+        </p>
+        <div className="spam-legend-scales">
+          <span className="legend-scale low">0–54% · Genuine</span>
+          <span className="legend-scale medium">55–79% · Suspicious</span>
+          <span className="legend-scale high">80–100% · Likely spam</span>
+        </div>
+      </div>
+
+      {topSignals.length > 0 && (
         <div className="spam-reasons">
           <h4>Why Reviews Were Flagged</h4>
           <div className="reason-tags">
-            {topReasons.map(([reason, count]) => (
-              <span key={reason} className="reason-tag">
-                {reason} <span className="reason-count">{count}</span>
+            {topSignals.map(([signal, count]) => (
+              <span key={signal} className="reason-tag">
+                {signal} <span className="reason-count">{count}</span>
               </span>
             ))}
           </div>
@@ -156,7 +155,8 @@ export default function SpamDetection({ analysisId, activeModel }: Props) {
             <div className="spam-review-list">
               {displayed.map((review, i) => {
                 const isExpanded = expanded === i;
-                const reasons = getSpamReasons(review);
+                const reasons = review.spam_reasons || [];
+                const risk = review.spam_confidence || (review.spam_score >= 0.8 ? "high" : review.spam_score >= 0.55 ? "medium" : "low");
                 return (
                   <div key={i} className={`spam-review-item ${isExpanded ? "expanded" : ""}`}>
                     <button
@@ -174,7 +174,12 @@ export default function SpamDetection({ analysisId, activeModel }: Props) {
                         </span>
                       </div>
                       <div className="spam-review-right">
-                        <span className="spam-score-pill">{review.spam_score.toFixed(2)}</span>
+                        <span
+                          className={`spam-score-pill risk-${risk}`}
+                          title={`${fmtScore(review.spam_score)} confidence - ${RISK_LABEL[risk]}`}
+                        >
+                          {fmtScore(review.spam_score)} <span className="spam-risk-dot">&#8226;</span>
+                        </span>
                         <span className={`expand-arrow ${isExpanded ? "open" : ""}`}>&#9656;</span>
                       </div>
                     </button>
@@ -182,9 +187,16 @@ export default function SpamDetection({ analysisId, activeModel }: Props) {
                     {isExpanded && (
                       <div className="spam-review-detail">
                         <p className="spam-full-text">{review.review_text}</p>
+                        <div className="spam-confidence-line">
+                          <strong>{fmtScore(review.spam_score)}</strong> spam confidence ·{" "}
+                          <strong className={risk}>{RISK_LABEL[risk]}</strong>
+                        </div>
                         <div className="spam-review-reasons">
-                          {reasons.map((r) => (
-                            <span key={r} className="reason-tag small">{r}</span>
+                          {reasons.map((r, ri) => (
+                            <div key={ri} className="spam-conf-reason">
+                              <span className="reason-tag small">{r.signal}</span>
+                              <span className="reason-detail">{r.detail}</span>
+                            </div>
                           ))}
                         </div>
                       </div>

@@ -141,6 +141,8 @@ def save_predictions(analysis_id: str, predictions: list[dict], model: str = "be
             "review_text": p.get("text", p.get("review_text", ""))[:2000],
             "sentiment": p["sentiment"],
             "spam_score": p.get("spam_score", 0.0),
+            "spam_confidence": p.get("spam_confidence", ""),
+            "spam_reasons": p.get("spam_reasons", []),
             "is_flagged": p.get("is_flagged", False),
             "cluster_id": p.get("cluster_id", -1),
             "cluster_label": p.get("cluster_label", ""),

@@ -122,6 +122,8 @@ export interface Prediction {
   review_text: string;
   sentiment: string;
   spam_score: number;
+  spam_confidence?: string;
+  spam_reasons?: { signal: string; detail: string }[];
   is_flagged: boolean;
   cluster_id: number;
   cluster_label: string;
