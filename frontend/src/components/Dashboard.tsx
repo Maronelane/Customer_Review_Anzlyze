@@ -322,7 +322,6 @@ export default function Dashboard({ analysisId, onReset, onCompare }: Props) {
                 >
                   <ProblemList
                     problems={results.problems?.problems ?? []}
-                    topWords={results.problems?.top_complaint_words ?? []}
                   />
                 </CollapsibleCard>
               </ErrorBoundary>
