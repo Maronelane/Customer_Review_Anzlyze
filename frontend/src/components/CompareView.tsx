@@ -18,7 +18,7 @@ interface ComparisonData {
     sentiment_distribution: { positive: number; negative: number; neutral: number; total: number };
     best_model: string;
     best_accuracy: number;
-    problems: { problems: { category: string; category_key: string; frequency: number; percentage: number }[] };
+    problems: { problems: { category: string; category_key: string; frequency: number; percentage: number }[]; top_complaint_words: { word: string; count: number }[] };
     spam_summary: { flagged_percentage: number; total_flagged: number; total_reviews: number };
     cluster_summary: unknown[];
   };
@@ -26,7 +26,7 @@ interface ComparisonData {
     sentiment_distribution: { positive: number; negative: number; neutral: number; total: number };
     best_model: string;
     best_accuracy: number;
-    problems: { problems: { category: string; category_key: string; frequency: number; percentage: number }[] };
+    problems: { problems: { category: string; category_key: string; frequency: number; percentage: number }[]; top_complaint_words: { word: string; count: number }[] };
     spam_summary: { flagged_percentage: number; total_flagged: number; total_reviews: number };
     cluster_summary: unknown[];
   };
@@ -36,6 +36,7 @@ interface ComparisonData {
       dataset2: { positive: number; negative: number; neutral: number };
     };
     problems: { shared: string[]; only_in_dataset1: string[]; only_in_dataset2: string[] };
+    complaint_words: { shared: string[]; only_in_dataset1: string[]; only_in_dataset2: string[] };
     spam: { dataset1_rate: number; dataset2_rate: number; dataset1_flagged: number; dataset2_flagged: number };
     models: { dataset1_name: string; dataset1_accuracy: number; dataset2_name: string; dataset2_accuracy: number };
     summary: Delta[];
@@ -132,7 +133,7 @@ export default function CompareView({ onBack }: Props) {
             Pit two datasets <span className="hero-title-gradient">head to head</span>
           </h1>
           <p className="page-subtitle">
-            Pick any two past analyses and instantly see how sentiment, spam and model accuracy change between them.
+            Pick any two past analyses and instantly see how sentiment, spam, complaints, keywords and model accuracy change between them.
           </p>
         </div>
 
@@ -306,6 +307,49 @@ export default function CompareView({ onBack }: Props) {
                       <div className="overlap-tags">
                         {comparison.deltas.problems.only_in_dataset2.map((k) => (
                           <span key={k} className="overlap-tag only2">{formatCat(k)}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Complaint Keywords Overlap */}
+            <div className="compare-section">
+              <h3>Top Complaint Keywords Overlap</h3>
+              {comparison.deltas.complaint_words.shared.length === 0 &&
+               comparison.deltas.complaint_words.only_in_dataset1.length === 0 &&
+               comparison.deltas.complaint_words.only_in_dataset2.length === 0 ? (
+                <p className="compare-empty">No complaint keywords detected.</p>
+              ) : (
+                <div className="compare-overlap">
+                  {comparison.deltas.complaint_words.shared.length > 0 && (
+                    <div className="overlap-group overlap-shared">
+                      <span className="overlap-badge">Shared ({comparison.deltas.complaint_words.shared.length})</span>
+                      <div className="overlap-tags">
+                        {comparison.deltas.complaint_words.shared.map((w) => (
+                          <span key={w} className="overlap-tag shared">{w}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {comparison.deltas.complaint_words.only_in_dataset1.length > 0 && (
+                    <div className="overlap-group overlap-only1">
+                      <span className="overlap-badge">Only in Dataset 1 ({comparison.deltas.complaint_words.only_in_dataset1.length})</span>
+                      <div className="overlap-tags">
+                        {comparison.deltas.complaint_words.only_in_dataset1.map((w) => (
+                          <span key={w} className="overlap-tag only1">{w}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {comparison.deltas.complaint_words.only_in_dataset2.length > 0 && (
+                    <div className="overlap-group overlap-only2">
+                      <span className="overlap-badge">Only in Dataset 2 ({comparison.deltas.complaint_words.only_in_dataset2.length})</span>
+                      <div className="overlap-tags">
+                        {comparison.deltas.complaint_words.only_in_dataset2.map((w) => (
+                          <span key={w} className="overlap-tag only2">{w}</span>
                         ))}
                       </div>
                     </div>
